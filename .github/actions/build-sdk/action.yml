@@ -1,0 +1,221 @@
+name: Build openDAQ SDK
+description: Configure and build openDAQ SDK
+
+inputs:
+  source-path:
+    description: 'Path to openDAQ source directory (defaults to ".")'
+    required: false
+    default: ''
+  build-path:
+    description: 'Path for build directory (defaults to "{source-path}/build")'
+    required: false
+    default: ''
+  cmake-generator:
+    description: 'CMake generator to use'
+    required: false
+    default: ''
+  cmake-config:
+    description: 'CMake build configuration (Release, Debug, RelWithDebInfo, MinSizeRel)'
+    required: false
+    default: 'Release'
+  cmake-compiler:
+    description: 'CMake compiler configuration (e.g., "-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache")'
+    required: false
+    default: ''
+  cmake-defines:
+    description: 'Additional CMake defines'
+    required: false
+    default: ''
+  cmake-parallel:
+    description: 'CMake parallel build flags (e.g., "-j 4" or "--parallel 4")'
+    required: false
+    default: ''
+  ccache-path:
+    description: 'Path for ccache directory'
+    required: false
+    default: ''
+  run-tests:
+    description: 'Run tests after build'
+    required: false
+    default: 'false'
+  cpack-generator:
+    description: 'CPack package generator (e.g., "DEB", "RPM", "NSIS", "TGZ", "ZIP")'
+    required: false
+    default: ''
+
+outputs:
+  version:
+    description: 'openDAQ version'
+    value: ${{ steps.read-version.outputs.version }}
+  commit-hash:
+    description: 'Short commit hash'
+    value: ${{ steps.read-version.outputs.commit-hash }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set defaults
+      id: defaults
+      shell: bash
+      run: |
+        # Set default source path
+        SOURCE_PATH="${{ inputs.source-path }}"
+        if [ -z "$SOURCE_PATH" ]; then
+          SOURCE_PATH="."
+        fi
+        echo "source-path=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
+
+        # Set default build path
+        BUILD_PATH="${{ inputs.build-path }}"
+        if [ -z "$BUILD_PATH" ]; then
+          BUILD_PATH="$SOURCE_PATH/build"
+        fi
+        echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
+
+        # Set default cmake-generator
+        CMAKE_GENERATOR="${{ inputs.cmake-generator }}"
+        if [ -z "$CMAKE_GENERATOR" ]; then
+          CMAKE_GENERATOR="Ninja"
+        fi
+        echo "cmake-generator=$CMAKE_GENERATOR" >> "$GITHUB_OUTPUT"
+
+        # Set default cmake-config
+        CMAKE_CONFIG="${{ inputs.cmake-config }}"
+        if [ -z "$CMAKE_CONFIG" ]; then
+          CMAKE_CONFIG="Release"
+        fi
+        echo "cmake-config=$CMAKE_CONFIG" >> "$GITHUB_OUTPUT"
+
+        # Set default ccache path
+        CCACHE_PATH="${{ inputs.ccache-path }}"
+        if [ -z "$CCACHE_PATH" ]; then
+          CCACHE_PATH="$SOURCE_PATH/.ccache"
+        fi
+        echo "ccache-path=$CCACHE_PATH" >> "$GITHUB_OUTPUT"
+
+    - name: Normalize paths
+      id: normalize
+      shell: bash
+      run: |
+        # Normalize source path
+        SOURCE_PATH="${{ steps.defaults.outputs.source-path }}"
+        if command -v cygpath &> /dev/null; then
+          SOURCE_PATH=$(cygpath -u "$SOURCE_PATH")
+        fi
+        echo "source-path=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
+
+        # Normalize build path
+        BUILD_PATH="${{ steps.defaults.outputs.build-path }}"
+        if command -v cygpath &> /dev/null; then
+          BUILD_PATH=$(cygpath -u "$BUILD_PATH")
+        fi
+        echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
+
+    - name: Read version and commit hash
+      id: read-version
+      shell: bash
+      working-directory: ${{ steps.normalize.outputs.source-path }}
+      run: |
+        # Read openDAQ version
+        version=$(cat opendaq_version)
+        version="v${version%%dev}"
+        echo "openDAQ version: $version"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+        # Get short commit hash
+        commit_hash=$(git rev-parse --short HEAD)
+        echo "Commit hash: $commit_hash"
+        echo "commit-hash=$commit_hash" >> "$GITHUB_OUTPUT"
+
+    - name: Setup compiler cache directory
+      id: ccache-config
+      shell: bash
+      run: |
+        # Get ccache path from defaults and normalize for Windows if needed
+        CCACHE_PATH="${{ steps.defaults.outputs.ccache-path }}"
+        SOURCE_PATH="${{ steps.defaults.outputs.source-path }}"
+
+        # Windows-specific settings
+        if command -v cygpath &> /dev/null; then
+          CCACHE_PATH="$(cygpath -w "$CCACHE_PATH")"
+          BASEDIR_PATH="$(cygpath -w "$SOURCE_PATH")"
+          echo "CCACHE_BASEDIR=$BASEDIR_PATH" >> "$GITHUB_ENV"
+          echo "CCACHE_SLOPPINESS=pch_defines,time_macros" >> "$GITHUB_ENV"
+        fi
+
+        echo "CCACHE_DIR=$CCACHE_PATH" >> "$GITHUB_ENV"
+        echo "dir=$CCACHE_PATH" >> "$GITHUB_OUTPUT"
+        echo "Using CCACHE_DIR: $CCACHE_PATH"
+        if command -v cygpath &> /dev/null; then
+          echo "Using CCACHE_BASEDIR: $BASEDIR_PATH"
+        fi
+
+    - name: Restore compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.ccache-config.outputs.dir }}
+        key: ccache-${{ runner.os }}-${{ hashFiles('**/*.c','**/*.cpp') }}
+        restore-keys: |
+          ccache-${{ runner.os }}-
+
+    - name: Configure CMake
+      shell: bash
+      run: |
+        echo "CMake Configuration:"
+        echo "  Source: ${{ steps.normalize.outputs.source-path }}"
+        echo "  Build: ${{ steps.normalize.outputs.build-path }}"
+        echo "  Generator: ${{ steps.defaults.outputs.cmake-generator }}"
+        echo "  Config: ${{ steps.defaults.outputs.cmake-config }}"
+        echo ""
+        echo "::group::CMake Configuration Output"
+        cmake -S "${{ steps.normalize.outputs.source-path }}" \
+          -B "${{ steps.normalize.outputs.build-path }}" \
+          -G "${{ steps.defaults.outputs.cmake-generator }}" \
+          -DCMAKE_BUILD_TYPE=${{ steps.defaults.outputs.cmake-config }} \
+          ${{ inputs.cmake-compiler }} \
+          ${{ inputs.cmake-defines }}
+        echo "::endgroup::"
+        echo "✓ CMake configuration completed"
+
+    - name: Build
+      shell: bash
+      run: |
+        echo "CMake Build:"
+        echo "  Config: ${{ steps.defaults.outputs.cmake-config }}"
+        echo "  Parallel: ${{ inputs.cmake-parallel }}"
+        echo ""
+        echo "::group::CMake Build Output"
+        cmake --build "${{ steps.normalize.outputs.build-path }}" --config ${{ steps.defaults.outputs.cmake-config }} ${{ inputs.cmake-parallel }}
+        echo "::endgroup::"
+        echo "✓ Build completed successfully"
+
+    - name: Test
+      if: inputs.run-tests == 'true'
+      shell: bash
+      run: |
+        echo "Running tests:"
+        echo "  Build dir: ${{ steps.normalize.outputs.build-path }}"
+        echo ""
+        echo "::group::CTest Output"
+        ctest --test-dir "${{ steps.normalize.outputs.build-path }}" --output-on-failure
+        echo "::endgroup::"
+        echo "✓ Tests passed successfully"
+
+    - name: Package
+      if: inputs.cpack-generator != ''
+      shell: bash
+      run: |
+        echo "CPack Packaging:"
+        echo "  Generator: ${{ inputs.cpack-generator }}"
+        echo ""
+        echo "::group::CPack Output"
+        cpack --config "${{ steps.normalize.outputs.build-path }}/CPackConfig.cmake" -G ${{ inputs.cpack-generator }}
+        echo "::endgroup::"
+        echo "✓ Package created successfully"
+
+    - name: Print compiler cache stats
+      shell: bash
+      run: |
+        echo "::group::Compiler cache statistics"
+        ccache -s -v
+        echo "::endgroup::"

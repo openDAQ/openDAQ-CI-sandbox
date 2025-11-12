@@ -1,0 +1,28 @@
+name: Test Reusable Build SDK
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-build:
+    strategy:
+      matrix:
+        include:
+          - runner: windows-latest
+            cmake-generator: Ninja
+            cmake-compiler: >-
+              -DCMAKE_C_COMPILER=cl
+              -DCMAKE_CXX_COMPILER=cl
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            cpack-generator: NSIS
+
+    uses: ./.github/workflows/reusable-build-sdk.yml
+    with:
+      runner: ${{ matrix.runner }}
+      path: openDAQ
+      cmake-generator: ${{ matrix.cmake-generator }}
+      cmake-compiler: ${{ matrix.cmake-compiler }}
+      cpack-generator: ${{ matrix.cpack-generator }}

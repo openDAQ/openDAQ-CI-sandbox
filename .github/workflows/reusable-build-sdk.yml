@@ -1,0 +1,154 @@
+name: Build openDAQ SDK
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Branch, tag, or commit SHA to checkout'
+        required: false
+        type: string
+        default: 'main'
+      path:
+        description: 'Path where to checkout the repository'
+        required: false
+        type: string
+        default: '.'
+      runner:
+        description: 'Runner to use for the build'
+        required: false
+        type: string
+        default: 'windows-latest'
+      cmake-generator:
+        description: 'CMake generator to use'
+        required: false
+        type: string
+        default: 'Ninja'
+      cmake-compiler:
+        description: 'CMake compiler configuration'
+        required: false
+        type: string
+        default: ''
+      cmake-defines:
+        description: 'CMake defines'
+        required: false
+        type: string
+        default: ''
+      cpack-generator:
+        description: 'CPack generator'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+
+    steps:
+      - name: Set defaults
+        id: defaults
+        shell: bash
+        run: |
+          # Set default path
+          PATH_VALUE="${{ inputs.path }}"
+          if [ -z "$PATH_VALUE" ]; then
+            PATH_VALUE="."
+          fi
+          echo "path=$PATH_VALUE" >> "$GITHUB_OUTPUT"
+
+          # Set default cmake-defines
+          CMAKE_DEFINES="${{ inputs.cmake-defines }}"
+          if [ -z "$CMAKE_DEFINES" ]; then
+            CMAKE_DEFINES_ARRAY=(
+              "-DOPENDAQ_ENABLE_TESTS=OFF"
+              "-DOPENDAQ_BUILD_DOCUMENTATION=OFF"
+              "-DDAQSIMULATOR_ENABLE_SIMULATOR_APP=OFF"
+              "-DDAQMODULES_REF_FB_MODULE=OFF"
+              "-DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF"
+              "-DDAQMODULES_REF_DEVICE_MODULE=OFF"
+              "-DDAQMODULES_AUDIO_DEVICE_MODULE=OFF"
+              "-DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF"
+              "-DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF"
+              "-DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF"
+              "-DOPENDAQ_ENABLE_OPCUA=OFF"
+              "-DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF"
+              "-DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF"
+            )
+            CMAKE_DEFINES="${CMAKE_DEFINES_ARRAY[*]}"
+          fi
+          echo "cmake-defines=$CMAKE_DEFINES" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout CI workflows
+        uses: actions/checkout@v4
+
+      - name: Setup dependencies
+        uses: ./.github/actions/setup-dependencies
+
+      - name: Checkout openDAQ
+        if: steps.defaults.outputs.path != '.'
+        uses: actions/checkout@v4
+        with:
+          repository: openDAQ/openDAQ
+          ref: ${{ inputs.ref }}
+          path: ${{ steps.defaults.outputs.path }}
+
+      - name: Build SDK
+        id: build
+        uses: ./.github/actions/build-sdk
+        with:
+          source-path: ${{ steps.defaults.outputs.path }}
+          cmake-generator: ${{ inputs.cmake-generator }}
+          cmake-compiler: ${{ inputs.cmake-compiler }}
+          cmake-defines: ${{ steps.defaults.outputs.cmake-defines }}
+          cpack-generator: ${{ inputs.cpack-generator }}
+
+      - name: Compose openDAQ framework filename
+        if: inputs.cpack-generator != ''
+        id: opendaq-filename
+        uses: openDAQ/actions/framework-compose-filename@jira/TBBAS-2680-opendaq-gh-actions-github-api-wrapper-unit-tests
+        with:
+          version: ${{ steps.build.outputs.version }}-${{ steps.build.outputs.commit-hash }}
+          packaging: ${{ inputs.cpack-generator }}
+
+      - name: Prepare artifact
+        if: inputs.cpack-generator != ''
+        shell: bash
+        env:
+          ARTIFACT_FILENAME: ${{ steps.opendaq-filename.outputs.filename }}
+          BUILD_PATH: ${{ steps.defaults.outputs.path }}/build
+        run: |
+          echo "Preparing Artifact:"
+          echo "  Target: $ARTIFACT_FILENAME"
+          echo ""
+
+          echo "::group::Searching for package file"
+          echo "Search directory: $BUILD_PATH/_packages"
+          echo "Search pattern: opendaq*"
+          ls -lah "$BUILD_PATH/_packages/" || echo "Directory not found or empty"
+          echo "::endgroup::"
+
+          source=$(find "$BUILD_PATH/_packages" -type f -iname 'opendaq*' | head -n1)
+
+          if [ -z "$source" ]; then
+            echo "::error::No package file found matching pattern 'opendaq*' in $BUILD_PATH/_packages"
+            exit 1
+          fi
+
+          echo "Found: $source ($(du -h "$source" | cut -f1))"
+
+          cp "$source" "./$ARTIFACT_FILENAME"
+
+          if [ -f "./$ARTIFACT_FILENAME" ]; then
+            echo "✓ Artifact prepared successfully"
+            ls -lh "./$ARTIFACT_FILENAME"
+          else
+            echo "::error::Failed to copy artifact from '$source' to '$ARTIFACT_FILENAME'"
+            exit 1
+          fi
+
+      - name: Upload artifact
+        if: inputs.cpack-generator != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.opendaq-filename.outputs.filename }}
+          path: ${{ steps.opendaq-filename.outputs.filename }}
+          retention-days: 30
