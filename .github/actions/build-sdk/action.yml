@@ -131,25 +131,32 @@ runs:
       id: ccache-config
       shell: bash
       run: |
-        # Get ccache path from defaults and normalize for Windows if needed
+        # Get ccache path from defaults
         CCACHE_PATH="${{ steps.defaults.outputs.ccache-path }}"
         SOURCE_PATH="${{ steps.defaults.outputs.source-path }}"
 
+        # Create ccache directory if it doesn't exist
+        mkdir -p "$CCACHE_PATH"
+
         # Convert to absolute path
         SOURCE_PATH_ABS="$(cd "$SOURCE_PATH" && pwd)"
+        CCACHE_PATH_ABS="$(cd "$CCACHE_PATH" && pwd)"
 
         # Windows-specific settings
         if command -v cygpath &> /dev/null; then
-          CCACHE_PATH="$(cygpath -w "$CCACHE_PATH")"
+          CCACHE_PATH_WIN="$(cygpath -w "$CCACHE_PATH_ABS")"
           BASEDIR_PATH="$(cygpath -w "$SOURCE_PATH_ABS")"
+          echo "CCACHE_DIR=$CCACHE_PATH_WIN" >> "$GITHUB_ENV"
           echo "CCACHE_BASEDIR=$BASEDIR_PATH" >> "$GITHUB_ENV"
           echo "CCACHE_SLOPPINESS=pch_defines,time_macros" >> "$GITHUB_ENV"
+          echo "Using CCACHE_DIR: $CCACHE_PATH_WIN"
           echo "Using CCACHE_BASEDIR: $BASEDIR_PATH"
+          echo "dir=$CCACHE_PATH_ABS" >> "$GITHUB_OUTPUT"
+        else
+          echo "CCACHE_DIR=$CCACHE_PATH_ABS" >> "$GITHUB_ENV"
+          echo "Using CCACHE_DIR: $CCACHE_PATH_ABS"
+          echo "dir=$CCACHE_PATH_ABS" >> "$GITHUB_OUTPUT"
         fi
-
-        echo "CCACHE_DIR=$CCACHE_PATH" >> "$GITHUB_ENV"
-        echo "dir=$CCACHE_PATH" >> "$GITHUB_OUTPUT"
-        echo "Using CCACHE_DIR: $CCACHE_PATH"
 
     - name: Restore compiler cache
       uses: actions/cache@v4
