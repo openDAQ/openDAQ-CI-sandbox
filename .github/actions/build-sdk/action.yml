@@ -135,20 +135,21 @@ runs:
         CCACHE_PATH="${{ steps.defaults.outputs.ccache-path }}"
         SOURCE_PATH="${{ steps.defaults.outputs.source-path }}"
 
+        # Convert to absolute path
+        SOURCE_PATH_ABS="$(cd "$SOURCE_PATH" && pwd)"
+
         # Windows-specific settings
         if command -v cygpath &> /dev/null; then
           CCACHE_PATH="$(cygpath -w "$CCACHE_PATH")"
-          BASEDIR_PATH="$(cygpath -w "$SOURCE_PATH")"
+          BASEDIR_PATH="$(cygpath -w "$SOURCE_PATH_ABS")"
           echo "CCACHE_BASEDIR=$BASEDIR_PATH" >> "$GITHUB_ENV"
           echo "CCACHE_SLOPPINESS=pch_defines,time_macros" >> "$GITHUB_ENV"
+          echo "Using CCACHE_BASEDIR: $BASEDIR_PATH"
         fi
 
         echo "CCACHE_DIR=$CCACHE_PATH" >> "$GITHUB_ENV"
         echo "dir=$CCACHE_PATH" >> "$GITHUB_OUTPUT"
         echo "Using CCACHE_DIR: $CCACHE_PATH"
-        if command -v cygpath &> /dev/null; then
-          echo "Using CCACHE_BASEDIR: $BASEDIR_PATH"
-        fi
 
     - name: Restore compiler cache
       uses: actions/cache@v4
