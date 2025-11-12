@@ -151,7 +151,7 @@ runs:
           echo "CCACHE_SLOPPINESS=pch_defines,time_macros" >> "$GITHUB_ENV"
           echo "Using CCACHE_DIR: $CCACHE_PATH_WIN"
           echo "Using CCACHE_BASEDIR: $BASEDIR_PATH"
-          echo "dir=$CCACHE_PATH_ABS" >> "$GITHUB_OUTPUT"
+          echo "dir=$CCACHE_PATH_WIN" >> "$GITHUB_OUTPUT"
         else
           echo "CCACHE_DIR=$CCACHE_PATH_ABS" >> "$GITHUB_ENV"
           echo "Using CCACHE_DIR: $CCACHE_PATH_ABS"
