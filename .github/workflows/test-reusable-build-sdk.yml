@@ -25,4 +25,5 @@ jobs:
       path: openDAQ
       cmake-generator: ${{ matrix.cmake-generator }}
       cmake-compiler: ${{ matrix.cmake-compiler }}
+      ccache-enable: true
       cpack-generator: ${{ matrix.cpack-generator }}

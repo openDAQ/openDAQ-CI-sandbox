@@ -30,6 +30,10 @@ inputs:
     description: 'CMake parallel build flags (e.g., "-j 4" or "--parallel 4")'
     required: false
     default: ''
+  ccache-enable:
+    description: 'Enable compiler cache (works best with Ninja generator)'
+    required: false
+    default: 'false'
   ccache-path:
     description: 'Path for ccache directory'
     required: false
@@ -128,6 +132,7 @@ runs:
         echo "commit-hash=$commit_hash" >> "$GITHUB_OUTPUT"
 
     - name: Setup compiler cache directory
+      if: inputs.ccache-enable == 'true'
       id: ccache-config
       shell: bash
       run: |
@@ -159,6 +164,7 @@ runs:
         fi
 
     - name: Restore compiler cache
+      if: inputs.ccache-enable == 'true'
       uses: actions/cache@v4
       with:
         path: ${{ steps.ccache-config.outputs.dir }}
@@ -222,6 +228,7 @@ runs:
         echo "✓ Package created successfully"
 
     - name: Print compiler cache stats
+      if: inputs.ccache-enable == 'true'
       shell: bash
       run: |
         echo "::group::Compiler cache statistics"

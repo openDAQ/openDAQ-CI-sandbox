@@ -33,6 +33,11 @@ on:
         required: false
         type: string
         default: ''
+      ccache-enable:
+        description: 'Enable compiler cache (works best with Ninja generator)'
+        required: false
+        type: boolean
+        default: false
       cpack-generator:
         description: 'CPack generator'
         required: false
@@ -99,6 +104,7 @@ jobs:
           cmake-generator: ${{ inputs.cmake-generator }}
           cmake-compiler: ${{ inputs.cmake-compiler }}
           cmake-defines: ${{ steps.defaults.outputs.cmake-defines }}
+          ccache-enable: ${{ inputs.ccache-enable }}
           cpack-generator: ${{ inputs.cpack-generator }}
 
       - name: Compose openDAQ framework filename
