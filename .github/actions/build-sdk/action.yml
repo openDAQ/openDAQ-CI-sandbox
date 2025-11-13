@@ -10,8 +10,12 @@ inputs:
     description: 'Path for build directory (defaults to "{source-path}/build")'
     required: false
     default: ''
-  cmake-generator:
-    description: 'CMake generator to use'
+  cmake-generator-name:
+    description: 'CMake generator name (e.g., "Ninja", "Visual Studio 17 2022")'
+    required: false
+    default: ''
+  cmake-preset-name:
+    description: 'CMake preset name (e.g., "package", "ci")'
     required: false
     default: ''
   cmake-config:
@@ -42,8 +46,8 @@ inputs:
     description: 'Run tests after build'
     required: false
     default: 'false'
-  cpack-generator:
-    description: 'CPack package generator (e.g., "DEB", "RPM", "NSIS", "TGZ", "ZIP")'
+  cpack-generator-name:
+    description: 'CPack generator name (e.g., "DEB", "RPM", "NSIS", "TGZ", "ZIP")'
     required: false
     default: ''
 
@@ -77,10 +81,11 @@ runs:
         echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
 
         # Set default cmake-generator
-        CMAKE_GENERATOR="${{ inputs.cmake-generator }}"
-        if [ -z "$CMAKE_GENERATOR" ]; then
-          CMAKE_GENERATOR="Ninja"
+        CMAKE_GENERATOR_NAME="${{ inputs.cmake-generator-name }}"
+        if [ -z "$CMAKE_GENERATOR_NAME" ]; then
+          CMAKE_GENERATOR_NAME="Ninja"
         fi
+        CMAKE_GENERATOR="-G \"$CMAKE_GENERATOR_NAME\""
         echo "cmake-generator=$CMAKE_GENERATOR" >> "$GITHUB_OUTPUT"
 
         # Set default cmake-config
@@ -96,6 +101,15 @@ runs:
           CCACHE_PATH="$SOURCE_PATH/.ccache"
         fi
         echo "ccache-path=$CCACHE_PATH" >> "$GITHUB_OUTPUT"
+
+        # Set cmake-preset (as --preset flag or empty string)
+        CMAKE_PRESET_NAME="${{ inputs.cmake-preset-name }}"
+        if [ -z "$CMAKE_PRESET_NAME" ]; then
+          CMAKE_PRESET=""
+        else
+          CMAKE_PRESET="--preset $CMAKE_PRESET_NAME"
+        fi
+        echo "cmake-preset=$CMAKE_PRESET" >> "$GITHUB_OUTPUT"
 
     - name: Normalize paths
       id: normalize
@@ -113,6 +127,10 @@ runs:
         if command -v cygpath &> /dev/null; then
           BUILD_PATH=$(cygpath -u "$BUILD_PATH")
         fi
+
+        # Create build directory if it doesn't exist
+        mkdir -p "$BUILD_PATH"
+
         echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
 
     - name: Read version and commit hash
@@ -175,16 +193,25 @@ runs:
     - name: Configure CMake
       shell: bash
       run: |
+        # Get absolute paths
+        SOURCE_DIR="$(cd "${{ steps.normalize.outputs.source-path }}" && pwd)"
+        BUILD_DIR="$(cd "${{ steps.normalize.outputs.build-path }}" && pwd)"
+
         echo "CMake Configuration:"
-        echo "  Source: ${{ steps.normalize.outputs.source-path }}"
-        echo "  Build: ${{ steps.normalize.outputs.build-path }}"
+        echo "  Source: $SOURCE_DIR"
+        echo "  Build: $BUILD_DIR"
         echo "  Generator: ${{ steps.defaults.outputs.cmake-generator }}"
+        echo "  Preset: ${{ steps.defaults.outputs.cmake-preset }}"
         echo "  Config: ${{ steps.defaults.outputs.cmake-config }}"
         echo ""
+
+        # Run cmake from inside build directory
+        cd "$BUILD_DIR"
+
         echo "::group::CMake Configuration Output"
-        cmake -S "${{ steps.normalize.outputs.source-path }}" \
-          -B "${{ steps.normalize.outputs.build-path }}" \
-          -G "${{ steps.defaults.outputs.cmake-generator }}" \
+        cmake "$SOURCE_DIR" \
+          ${{ steps.defaults.outputs.cmake-generator }} \
+          ${{ steps.defaults.outputs.cmake-preset }} \
           -DCMAKE_BUILD_TYPE=${{ steps.defaults.outputs.cmake-config }} \
           ${{ inputs.cmake-compiler }} \
           ${{ inputs.cmake-defines }}
@@ -216,14 +243,14 @@ runs:
         echo "✓ Tests passed successfully"
 
     - name: Package
-      if: inputs.cpack-generator != ''
+      if: inputs.cpack-generator-name != ''
       shell: bash
       run: |
         echo "CPack Packaging:"
-        echo "  Generator: ${{ inputs.cpack-generator }}"
+        echo "  Generator: ${{ inputs.cpack-generator-name }}"
         echo ""
         echo "::group::CPack Output"
-        cpack --config "${{ steps.normalize.outputs.build-path }}/CPackConfig.cmake" -G ${{ inputs.cpack-generator }}
+        cpack --config "${{ steps.normalize.outputs.build-path }}/CPackConfig.cmake" -G ${{ inputs.cpack-generator-name }}
         echo "::endgroup::"
         echo "✓ Package created successfully"
 

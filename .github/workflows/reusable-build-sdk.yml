@@ -18,11 +18,16 @@ on:
         required: false
         type: string
         default: 'windows-latest'
-      cmake-generator:
-        description: 'CMake generator to use'
+      cmake-generator-name:
+        description: 'CMake generator name (e.g., "Ninja", "Visual Studio 17 2022")'
         required: false
         type: string
         default: 'Ninja'
+      cmake-preset-name:
+        description: 'CMake preset name (e.g., "package", "ci")'
+        required: false
+        type: string
+        default: ''
       cmake-compiler:
         description: 'CMake compiler configuration'
         required: false
@@ -38,8 +43,8 @@ on:
         required: false
         type: boolean
         default: false
-      cpack-generator:
-        description: 'CPack generator'
+      cpack-generator-name:
+        description: 'CPack generator name (e.g., "DEB", "RPM", "NSIS", "TGZ", "ZIP")'
         required: false
         type: string
         default: ''
@@ -101,22 +106,23 @@ jobs:
         uses: ./.github/actions/build-sdk
         with:
           source-path: ${{ steps.defaults.outputs.path }}
-          cmake-generator: ${{ inputs.cmake-generator }}
+          cmake-generator-name: ${{ inputs.cmake-generator-name }}
+          cmake-preset-name: ${{ inputs.cmake-preset-name }}
           cmake-compiler: ${{ inputs.cmake-compiler }}
           cmake-defines: ${{ steps.defaults.outputs.cmake-defines }}
           ccache-enable: ${{ inputs.ccache-enable }}
-          cpack-generator: ${{ inputs.cpack-generator }}
+          cpack-generator-name: ${{ inputs.cpack-generator-name }}
 
       - name: Compose openDAQ framework filename
-        if: inputs.cpack-generator != ''
+        if: inputs.cpack-generator-name != ''
         id: opendaq-filename
-        uses: openDAQ/actions/framework-compose-filename@jira/TBBAS-2680-opendaq-gh-actions-github-api-wrapper-unit-tests
+        uses: openDAQ/actions/framework-compose-filename@jira/TBBAS-2672-opendaq-gh-actions-architecture
         with:
           version: ${{ steps.build.outputs.version }}-${{ steps.build.outputs.commit-hash }}
-          packaging: ${{ inputs.cpack-generator }}
+          packaging: ${{ inputs.cpack-generator-name }}
 
       - name: Prepare artifact
-        if: inputs.cpack-generator != ''
+        if: inputs.cpack-generator-name != ''
         shell: bash
         env:
           ARTIFACT_FILENAME: ${{ steps.opendaq-filename.outputs.filename }}
@@ -152,7 +158,7 @@ jobs:
           fi
 
       - name: Upload artifact
-        if: inputs.cpack-generator != ''
+        if: inputs.cpack-generator-name != ''
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.opendaq-filename.outputs.filename }}

@@ -11,19 +11,16 @@ jobs:
       matrix:
         include:
           - runner: windows-latest
-            cmake-generator: Ninja
-            cmake-compiler: >-
-              -DCMAKE_C_COMPILER=cl
-              -DCMAKE_CXX_COMPILER=cl
-              -DCMAKE_C_COMPILER_LAUNCHER=ccache
-              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-            cpack-generator: NSIS
+            cmake-generator-name: Visual Studio 17 2022
+            cmake-compiler: ""
+            cpack-generator-name: NSIS
 
     uses: ./.github/workflows/reusable-build-sdk.yml
     with:
       runner: ${{ matrix.runner }}
       path: openDAQ
-      cmake-generator: ${{ matrix.cmake-generator }}
+      cmake-generator-name: ${{ matrix.cmake-generator-name }}
+      cmake-preset-name: package
       cmake-compiler: ${{ matrix.cmake-compiler }}
-      ccache-enable: true
-      cpack-generator: ${{ matrix.cpack-generator }}
+      ccache-enable: false
+      cpack-generator-name: ${{ matrix.cpack-generator-name }}

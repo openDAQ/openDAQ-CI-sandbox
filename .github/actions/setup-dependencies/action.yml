@@ -32,7 +32,7 @@ runs:
       shell: pwsh
       run: |
         Write-Host "::group::Installing Windows dependencies"
-        choco install ccache ninja nsis vswhere -y
+        choco install ccache ninja nsis vswhere dotnet-sdk -y
         Write-Host "::endgroup::"
         Write-Host "✓ Windows dependencies installed"
 
