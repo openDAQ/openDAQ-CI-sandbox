@@ -361,10 +361,12 @@ runs:
     - name: Test
       if: inputs.ctest-enable == 'true'
       shell: bash
+      working-directory: ${{ steps.setup.outputs.source-path }}
       env:
         GTEST_OUTPUT: ${{ steps.setup.outputs.gtest-output }}
       run: |
         echo "Running tests:"
+        echo "  Source dir: ${{ steps.setup.outputs.source-path }}"
         echo "  Build dir: ${{ steps.setup.outputs.build-path }}"
         echo "  GTest output: ${{ steps.setup.outputs.gtest-output }}"
         echo "  CTest preset: ${{ inputs.ctest-preset }}"
