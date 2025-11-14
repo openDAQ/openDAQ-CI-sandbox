@@ -26,8 +26,12 @@ inputs:
     description: 'CMake compiler configuration (e.g., "-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache")'
     required: false
     default: ''
-  cmake-defines:
-    description: 'Additional CMake defines'
+  cmake-config-args:
+    description: 'Additional CMake configure arguments'
+    required: false
+    default: ''
+  cmake-build-args:
+    description: 'Additional CMake build arguments'
     required: false
     default: ''
   cmake-parallel:
@@ -42,10 +46,45 @@ inputs:
     description: 'Path for ccache directory'
     required: false
     default: ''
-  run-tests:
+  ctest-enable:
     description: 'Run tests after build'
     required: false
-    default: 'false'
+    type: boolean
+    default: false
+  ctest-output-on-failure:
+    description: 'Output test output on failure (false = use preset setting)'
+    required: false
+    type: boolean
+    default: false
+  ctest-preset:
+    description: 'CTest preset name (e.g., "run_tests")'
+    required: false
+    default: ''
+  ctest-tests-regex:
+    description: 'Run only tests matching regex'
+    required: false
+    default: ''
+  ctest-exclude-regex:
+    description: 'Exclude tests matching regex'
+    required: false
+    default: ''
+  ctest-parallel:
+    description: 'Number of parallel test jobs (0 = sequential)'
+    required: false
+    type: number
+    default: 0
+  gtest-output-xml-path:
+    description: 'GTest XML output directory (empty = disabled)'
+    required: false
+    default: 'test_results'
+  ctest-output-junit:
+    description: 'CTest JUnit XML file path (empty = disabled)'
+    required: false
+    default: ''
+  ctest-args:
+    description: 'Additional CTest arguments'
+    required: false
+    default: ''
   cpack-generator-name:
     description: 'CPack generator name (e.g., "DEB", "RPM", "NSIS", "TGZ", "ZIP")'
     required: false
@@ -62,23 +101,37 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Set defaults
-      id: defaults
+    - name: Setup paths and parameters
+      id: setup
       shell: bash
       run: |
+        # ===== PATH SETUP =====
+
         # Set default source path
         SOURCE_PATH="${{ inputs.source-path }}"
         if [ -z "$SOURCE_PATH" ]; then
           SOURCE_PATH="."
         fi
-        echo "source-path=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
 
         # Set default build path
         BUILD_PATH="${{ inputs.build-path }}"
         if [ -z "$BUILD_PATH" ]; then
           BUILD_PATH="$SOURCE_PATH/build"
         fi
+
+        # Normalize paths (convert to Unix style on Windows)
+        if command -v cygpath &> /dev/null; then
+          SOURCE_PATH=$(cygpath -u "$SOURCE_PATH")
+          BUILD_PATH=$(cygpath -u "$BUILD_PATH")
+        fi
+
+        # Create build directory if it doesn't exist
+        mkdir -p "$BUILD_PATH"
+
+        echo "source-path=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
         echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
+
+        # ===== CMAKE CONFIGURATION =====
 
         # Set default cmake-generator
         CMAKE_GENERATOR_NAME="${{ inputs.cmake-generator-name }}"
@@ -95,12 +148,9 @@ runs:
         fi
         echo "cmake-config=$CMAKE_CONFIG" >> "$GITHUB_OUTPUT"
 
-        # Set default ccache path
-        CCACHE_PATH="${{ inputs.ccache-path }}"
-        if [ -z "$CCACHE_PATH" ]; then
-          CCACHE_PATH="$SOURCE_PATH/.ccache"
-        fi
-        echo "ccache-path=$CCACHE_PATH" >> "$GITHUB_OUTPUT"
+        # Build type argument
+        CMAKE_BUILD_TYPE="-DCMAKE_BUILD_TYPE=$CMAKE_CONFIG"
+        echo "cmake-build-type=$CMAKE_BUILD_TYPE" >> "$GITHUB_OUTPUT"
 
         # Set cmake-preset (as --preset flag or empty string)
         CMAKE_PRESET_NAME="${{ inputs.cmake-preset-name }}"
@@ -111,32 +161,107 @@ runs:
         fi
         echo "cmake-preset=$CMAKE_PRESET" >> "$GITHUB_OUTPUT"
 
-    - name: Normalize paths
-      id: normalize
-      shell: bash
-      run: |
-        # Normalize source path
-        SOURCE_PATH="${{ steps.defaults.outputs.source-path }}"
-        if command -v cygpath &> /dev/null; then
-          SOURCE_PATH=$(cygpath -u "$SOURCE_PATH")
+        # Set default ccache path
+        CCACHE_PATH="${{ inputs.ccache-path }}"
+        if [ -z "$CCACHE_PATH" ]; then
+          CCACHE_PATH="$SOURCE_PATH/.ccache"
         fi
-        echo "source-path=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
+        echo "ccache-path=$CCACHE_PATH" >> "$GITHUB_OUTPUT"
 
-        # Normalize build path
-        BUILD_PATH="${{ steps.defaults.outputs.build-path }}"
-        if command -v cygpath &> /dev/null; then
-          BUILD_PATH=$(cygpath -u "$BUILD_PATH")
+        # ===== CMAKE BUILD CONFIGURATION =====
+
+        # Build config argument
+        CMAKE_BUILD_CONFIG="--config $CMAKE_CONFIG"
+        echo "cmake-build-config=$CMAKE_BUILD_CONFIG" >> "$GITHUB_OUTPUT"
+
+        # Build parallel argument
+        CMAKE_BUILD_PARALLEL="${{ inputs.cmake-parallel }}"
+        echo "cmake-build-parallel=$CMAKE_BUILD_PARALLEL" >> "$GITHUB_OUTPUT"
+
+        # ===== CTEST CONFIGURATION =====
+
+        # output-on-failure
+        OUTPUT_ON_FAILURE="${{ inputs.ctest-output-on-failure }}"
+        if [ "$OUTPUT_ON_FAILURE" = "true" ]; then
+          OUTPUT_ON_FAILURE_ARG="--output-on-failure"
+        else
+          OUTPUT_ON_FAILURE_ARG=""
         fi
+        echo "ctest-output-on-failure=$OUTPUT_ON_FAILURE_ARG" >> "$GITHUB_OUTPUT"
 
-        # Create build directory if it doesn't exist
-        mkdir -p "$BUILD_PATH"
+        # Preset
+        CTEST_PRESET="${{ inputs.ctest-preset }}"
+        if [ -n "$CTEST_PRESET" ]; then
+          CTEST_PRESET_ARG="--preset $CTEST_PRESET"
+        else
+          CTEST_PRESET_ARG=""
+        fi
+        echo "ctest-preset=$CTEST_PRESET_ARG" >> "$GITHUB_OUTPUT"
 
-        echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
+        # Tests regex
+        TESTS_REGEX="${{ inputs.ctest-tests-regex }}"
+        if [ -n "$TESTS_REGEX" ]; then
+          TESTS_REGEX_ARG="--tests-regex $TESTS_REGEX"
+        else
+          TESTS_REGEX_ARG=""
+        fi
+        echo "ctest-tests-regex=$TESTS_REGEX_ARG" >> "$GITHUB_OUTPUT"
+
+        # Exclude regex
+        EXCLUDE_REGEX="${{ inputs.ctest-exclude-regex }}"
+        if [ -n "$EXCLUDE_REGEX" ]; then
+          EXCLUDE_REGEX_ARG="--exclude-regex $EXCLUDE_REGEX"
+        else
+          EXCLUDE_REGEX_ARG=""
+        fi
+        echo "ctest-exclude-regex=$EXCLUDE_REGEX_ARG" >> "$GITHUB_OUTPUT"
+
+        # Parallel
+        PARALLEL="${{ inputs.ctest-parallel }}"
+        if [ "$PARALLEL" -gt 0 ] 2>/dev/null; then
+          PARALLEL_ARG="--parallel $PARALLEL"
+        else
+          PARALLEL_ARG=""
+        fi
+        echo "ctest-parallel=$PARALLEL_ARG" >> "$GITHUB_OUTPUT"
+
+        # GTest XML output - construct full value for GTEST_OUTPUT
+        GTEST_XML_PATH="${{ inputs.gtest-output-xml-path }}"
+        if [ -n "$GTEST_XML_PATH" ]; then
+          # Make it relative to build path if not absolute
+          if [[ ! "$GTEST_XML_PATH" = /* ]]; then
+            GTEST_XML_PATH="$BUILD_PATH/$GTEST_XML_PATH"
+          fi
+          mkdir -p "$GTEST_XML_PATH"
+          GTEST_OUTPUT="xml:$GTEST_XML_PATH/"
+        else
+          GTEST_OUTPUT=""
+        fi
+        echo "gtest-output=$GTEST_OUTPUT" >> "$GITHUB_OUTPUT"
+
+        # CTest JUnit output (normalize if needed)
+        CTEST_JUNIT_PATH="${{ inputs.ctest-output-junit }}"
+        if [ -n "$CTEST_JUNIT_PATH" ]; then
+          # Make it relative to build path if not absolute
+          if [[ ! "$CTEST_JUNIT_PATH" = /* ]]; then
+            CTEST_JUNIT_PATH="$BUILD_PATH/$CTEST_JUNIT_PATH"
+          fi
+          # Create parent directory
+          mkdir -p "$(dirname "$CTEST_JUNIT_PATH")"
+          CTEST_JUNIT_ARG="--output-junit $CTEST_JUNIT_PATH"
+        else
+          CTEST_JUNIT_ARG=""
+        fi
+        echo "ctest-output-junit=$CTEST_JUNIT_ARG" >> "$GITHUB_OUTPUT"
+
+        # Additional args
+        CTEST_ARGS="${{ inputs.ctest-args }}"
+        echo "ctest-args=$CTEST_ARGS" >> "$GITHUB_OUTPUT"
 
     - name: Read version and commit hash
       id: read-version
       shell: bash
-      working-directory: ${{ steps.normalize.outputs.source-path }}
+      working-directory: ${{ steps.setup.outputs.source-path }}
       run: |
         # Read openDAQ version
         version=$(cat opendaq_version)
@@ -154,9 +279,9 @@ runs:
       id: ccache-config
       shell: bash
       run: |
-        # Get ccache path from defaults
-        CCACHE_PATH="${{ steps.defaults.outputs.ccache-path }}"
-        SOURCE_PATH="${{ steps.defaults.outputs.source-path }}"
+        # Get ccache path from setup
+        CCACHE_PATH="${{ steps.setup.outputs.ccache-path }}"
+        SOURCE_PATH="${{ steps.setup.outputs.source-path }}"
 
         # Create ccache directory if it doesn't exist
         mkdir -p "$CCACHE_PATH"
@@ -194,15 +319,15 @@ runs:
       shell: bash
       run: |
         # Get absolute paths
-        SOURCE_DIR="$(cd "${{ steps.normalize.outputs.source-path }}" && pwd)"
-        BUILD_DIR="$(cd "${{ steps.normalize.outputs.build-path }}" && pwd)"
+        SOURCE_DIR="$(cd "${{ steps.setup.outputs.source-path }}" && pwd)"
+        BUILD_DIR="$(cd "${{ steps.setup.outputs.build-path }}" && pwd)"
 
         echo "CMake Configuration:"
         echo "  Source: $SOURCE_DIR"
         echo "  Build: $BUILD_DIR"
-        echo "  Generator: ${{ steps.defaults.outputs.cmake-generator }}"
-        echo "  Preset: ${{ steps.defaults.outputs.cmake-preset }}"
-        echo "  Config: ${{ steps.defaults.outputs.cmake-config }}"
+        echo "  Generator: ${{ steps.setup.outputs.cmake-generator }}"
+        echo "  Preset: ${{ steps.setup.outputs.cmake-preset }}"
+        echo "  Config: ${{ steps.setup.outputs.cmake-config }}"
         echo ""
 
         # Run cmake from inside build directory
@@ -210,11 +335,11 @@ runs:
 
         echo "::group::CMake Configuration Output"
         cmake "$SOURCE_DIR" \
-          ${{ steps.defaults.outputs.cmake-generator }} \
-          ${{ steps.defaults.outputs.cmake-preset }} \
-          -DCMAKE_BUILD_TYPE=${{ steps.defaults.outputs.cmake-config }} \
+          ${{ steps.setup.outputs.cmake-generator }} \
+          ${{ steps.setup.outputs.cmake-preset }} \
+          ${{ steps.setup.outputs.cmake-build-type }} \
           ${{ inputs.cmake-compiler }} \
-          ${{ inputs.cmake-defines }}
+          ${{ inputs.cmake-config-args }}
         echo "::endgroup::"
         echo "✓ CMake configuration completed"
 
@@ -222,25 +347,39 @@ runs:
       shell: bash
       run: |
         echo "CMake Build:"
-        echo "  Config: ${{ steps.defaults.outputs.cmake-config }}"
-        echo "  Parallel: ${{ inputs.cmake-parallel }}"
+        echo "  Config: ${{ steps.setup.outputs.cmake-config }}"
+        echo "  Parallel: ${{ steps.setup.outputs.cmake-build-parallel }}"
         echo ""
         echo "::group::CMake Build Output"
-        cmake --build "${{ steps.normalize.outputs.build-path }}" --config ${{ steps.defaults.outputs.cmake-config }} ${{ inputs.cmake-parallel }}
+        cmake --build "${{ steps.setup.outputs.build-path }}" \
+          ${{ steps.setup.outputs.cmake-build-config }} \
+          ${{ steps.setup.outputs.cmake-build-parallel }} \
+          ${{ inputs.cmake-build-args }}
         echo "::endgroup::"
         echo "✓ Build completed successfully"
 
     - name: Test
-      if: inputs.run-tests == 'true'
+      if: inputs.ctest-enable == 'true'
       shell: bash
+      env:
+        GTEST_OUTPUT: ${{ steps.setup.outputs.gtest-output }}
       run: |
         echo "Running tests:"
-        echo "  Build dir: ${{ steps.normalize.outputs.build-path }}"
+        echo "  Build dir: ${{ steps.setup.outputs.build-path }}"
+        echo "  GTest output: ${{ steps.setup.outputs.gtest-output }}"
+        echo "  CTest preset: ${{ inputs.ctest-preset }}"
         echo ""
         echo "::group::CTest Output"
-        ctest --test-dir "${{ steps.normalize.outputs.build-path }}" --output-on-failure
+        ctest --test-dir "${{ steps.setup.outputs.build-path }}" \
+          ${{ steps.setup.outputs.ctest-output-on-failure }} \
+          ${{ steps.setup.outputs.ctest-preset }} \
+          ${{ steps.setup.outputs.ctest-tests-regex }} \
+          ${{ steps.setup.outputs.ctest-exclude-regex }} \
+          ${{ steps.setup.outputs.ctest-parallel }} \
+          ${{ steps.setup.outputs.ctest-output-junit }} \
+          ${{ steps.setup.outputs.ctest-args }}
         echo "::endgroup::"
-        echo "✓ Tests passed successfully"
+        echo "✓ Tests completed"
 
     - name: Package
       if: inputs.cpack-generator-name != ''
@@ -250,7 +389,7 @@ runs:
         echo "  Generator: ${{ inputs.cpack-generator-name }}"
         echo ""
         echo "::group::CPack Output"
-        cpack --config "${{ steps.normalize.outputs.build-path }}/CPackConfig.cmake" -G ${{ inputs.cpack-generator-name }}
+        cpack --config "${{ steps.setup.outputs.build-path }}/CPackConfig.cmake" -G ${{ inputs.cpack-generator-name }}
         echo "::endgroup::"
         echo "✓ Package created successfully"
 

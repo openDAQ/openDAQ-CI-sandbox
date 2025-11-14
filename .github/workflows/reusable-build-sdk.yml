@@ -33,8 +33,13 @@ on:
         required: false
         type: string
         default: ''
-      cmake-defines:
-        description: 'CMake defines'
+      cmake-config-args:
+        description: 'Additional CMake configure arguments'
+        required: false
+        type: string
+        default: ''
+      cmake-build-args:
+        description: 'Additional CMake build arguments'
         required: false
         type: string
         default: ''
@@ -43,6 +48,51 @@ on:
         required: false
         type: boolean
         default: false
+      ctest-enable:
+        description: 'Run tests after build'
+        required: false
+        type: boolean
+        default: false
+      ctest-output-on-failure:
+        description: 'Output test output on failure (false = use preset setting)'
+        required: false
+        type: boolean
+        default: false
+      ctest-preset:
+        description: 'CTest preset name (e.g., "run_tests")'
+        required: false
+        type: string
+        default: ''
+      ctest-tests-regex:
+        description: 'Run only tests matching regex'
+        required: false
+        type: string
+        default: ''
+      ctest-exclude-regex:
+        description: 'Exclude tests matching regex'
+        required: false
+        type: string
+        default: ''
+      ctest-parallel:
+        description: 'Number of parallel test jobs (0 = sequential)'
+        required: false
+        type: number
+        default: 0
+      gtest-output-xml-path:
+        description: 'GTest XML output directory (empty = disabled)'
+        required: false
+        type: string
+        default: 'test_results'
+      ctest-output-junit:
+        description: 'CTest JUnit XML file path (empty = disabled)'
+        required: false
+        type: string
+        default: ''
+      ctest-args:
+        description: 'Additional CTest arguments'
+        required: false
+        type: string
+        default: ''
       cpack-generator-name:
         description: 'CPack generator name (e.g., "DEB", "RPM", "NSIS", "TGZ", "ZIP")'
         required: false
@@ -65,10 +115,10 @@ jobs:
           fi
           echo "path=$PATH_VALUE" >> "$GITHUB_OUTPUT"
 
-          # Set default cmake-defines
-          CMAKE_DEFINES="${{ inputs.cmake-defines }}"
-          if [ -z "$CMAKE_DEFINES" ]; then
-            CMAKE_DEFINES_ARRAY=(
+          # Set default cmake-config-args
+          CMAKE_CONFIG_ARGS="${{ inputs.cmake-config-args }}"
+          if [ -z "$CMAKE_CONFIG_ARGS" ]; then
+            CMAKE_CONFIG_ARGS_ARRAY=(
               "-DOPENDAQ_ENABLE_TESTS=OFF"
               "-DOPENDAQ_BUILD_DOCUMENTATION=OFF"
               "-DDAQSIMULATOR_ENABLE_SIMULATOR_APP=OFF"
@@ -83,9 +133,14 @@ jobs:
               "-DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF"
               "-DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF"
             )
-            CMAKE_DEFINES="${CMAKE_DEFINES_ARRAY[*]}"
+            CMAKE_CONFIG_ARGS="${CMAKE_CONFIG_ARGS_ARRAY[*]}"
           fi
-          echo "cmake-defines=$CMAKE_DEFINES" >> "$GITHUB_OUTPUT"
+          echo "cmake-config-args=$CMAKE_CONFIG_ARGS" >> "$GITHUB_OUTPUT"
+
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '4.0'
 
       - name: Checkout CI workflows
         uses: actions/checkout@v4
@@ -109,8 +164,18 @@ jobs:
           cmake-generator-name: ${{ inputs.cmake-generator-name }}
           cmake-preset-name: ${{ inputs.cmake-preset-name }}
           cmake-compiler: ${{ inputs.cmake-compiler }}
-          cmake-defines: ${{ steps.defaults.outputs.cmake-defines }}
+          cmake-config-args: ${{ steps.defaults.outputs.cmake-config-args }}
+          cmake-build-args: ${{ inputs.cmake-build-args }}
           ccache-enable: ${{ inputs.ccache-enable }}
+          ctest-enable: ${{ inputs.ctest-enable }}
+          ctest-output-on-failure: ${{ inputs.ctest-output-on-failure }}
+          ctest-preset: ${{ inputs.ctest-preset }}
+          ctest-tests-regex: ${{ inputs.ctest-tests-regex }}
+          ctest-exclude-regex: ${{ inputs.ctest-exclude-regex }}
+          ctest-parallel: ${{ inputs.ctest-parallel }}
+          gtest-output-xml-path: ${{ inputs.gtest-output-xml-path }}
+          ctest-output-junit: ${{ inputs.ctest-output-junit }}
+          ctest-args: ${{ inputs.ctest-args }}
           cpack-generator-name: ${{ inputs.cpack-generator-name }}
 
       - name: Compose openDAQ framework filename

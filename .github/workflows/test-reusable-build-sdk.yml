@@ -12,7 +12,6 @@ jobs:
         include:
           - runner: windows-latest
             cmake-generator-name: Visual Studio 17 2022
-            cmake-compiler: ""
             cpack-generator-name: NSIS
 
     uses: ./.github/workflows/reusable-build-sdk.yml
@@ -20,7 +19,9 @@ jobs:
       runner: ${{ matrix.runner }}
       path: openDAQ
       cmake-generator-name: ${{ matrix.cmake-generator-name }}
-      cmake-preset-name: package
-      cmake-compiler: ${{ matrix.cmake-compiler }}
-      ccache-enable: false
+      cmake-preset-name: ci
+      cmake-config-args: -DOPENDAQ_MSVC_SINGLE_PROCESS_BUILD=ON -DDAQMODULES_PARQUET_RECORDER_MODULE=ON -DCMAKE_BUILD_TYPE=Release
+      ctest-enable: true
+      ctest-preset: run_tests
+      ctest-output-on-failure: true
       cpack-generator-name: ${{ matrix.cpack-generator-name }}
