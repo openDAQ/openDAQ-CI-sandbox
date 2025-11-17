@@ -113,20 +113,33 @@ runs:
           SOURCE_PATH="."
         fi
 
-        # Set default build path
+        # Normalize and convert to absolute path
+        if command -v cygpath &> /dev/null; then
+          # Windows: convert to Unix style first, then to absolute
+          SOURCE_PATH=$(cygpath -u "$SOURCE_PATH")
+          SOURCE_PATH=$(cd "$SOURCE_PATH" && pwd)
+        else
+          # Unix: convert to absolute
+          SOURCE_PATH=$(cd "$SOURCE_PATH" && pwd)
+        fi
+
+        # Set default build path AFTER source path is normalized
         BUILD_PATH="${{ inputs.build-path }}"
         if [ -z "$BUILD_PATH" ]; then
           BUILD_PATH="$SOURCE_PATH/build"
         fi
 
-        # Normalize paths (convert to Unix style on Windows)
+        # Normalize build path and convert to absolute
         if command -v cygpath &> /dev/null; then
-          SOURCE_PATH=$(cygpath -u "$SOURCE_PATH")
-          BUILD_PATH=$(cygpath -u "$BUILD_PATH")
+          # Windows: convert to Unix style if user provided path
+          if [ -n "${{ inputs.build-path }}" ]; then
+            BUILD_PATH=$(cygpath -u "$BUILD_PATH")
+          fi
         fi
 
-        # Create build directory if it doesn't exist
+        # Create build directory and convert to absolute path
         mkdir -p "$BUILD_PATH"
+        BUILD_PATH=$(cd "$BUILD_PATH" && pwd)
 
         echo "source-path=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
         echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
@@ -335,24 +348,18 @@ runs:
 
     - name: Configure CMake
       shell: bash
+      working-directory: ${{ steps.setup.outputs.source-path }}
       run: |
-        # Get absolute paths
-        SOURCE_DIR="$(cd "${{ steps.setup.outputs.source-path }}" && pwd)"
-        BUILD_DIR="$(cd "${{ steps.setup.outputs.build-path }}" && pwd)"
-
         echo "CMake Configuration:"
-        echo "  Source: $SOURCE_DIR"
-        echo "  Build: $BUILD_DIR"
+        echo "  Source: ${{ steps.setup.outputs.source-path }}"
+        echo "  Build: ${{ steps.setup.outputs.build-path }}"
         echo "  Generator: ${{ steps.setup.outputs.cmake-generator }}"
         echo "  Preset: ${{ steps.setup.outputs.cmake-preset }}"
         echo "  Config: ${{ steps.setup.outputs.cmake-config }}"
         echo ""
 
-        # Run cmake from inside build directory
-        cd "$BUILD_DIR"
-
         echo "::group::CMake Configuration Output"
-        cmake "$SOURCE_DIR" \
+        cmake -B "${{ steps.setup.outputs.build-path }}" \
           ${{ steps.setup.outputs.cmake-generator }} \
           ${{ steps.setup.outputs.cmake-preset }} \
           ${{ steps.setup.outputs.cmake-build-type }} \
@@ -363,8 +370,10 @@ runs:
 
     - name: Build
       shell: bash
+      working-directory: ${{ steps.setup.outputs.source-path }}
       run: |
         echo "CMake Build:"
+        echo "  Build dir: ${{ steps.setup.outputs.build-path }}"
         echo "  Config: ${{ steps.setup.outputs.cmake-config }}"
         echo "  Parallel: ${{ steps.setup.outputs.cmake-build-parallel }}"
         echo ""
@@ -379,6 +388,7 @@ runs:
     - name: Test
       if: inputs.ctest-enable == 'true'
       shell: bash
+      working-directory: ${{ steps.setup.outputs.source-path }}
       env:
         GTEST_OUTPUT: ${{ steps.setup.outputs.gtest-output }}
       run: |
@@ -404,8 +414,10 @@ runs:
     - name: Package
       if: inputs.cpack-generator-name != ''
       shell: bash
+      working-directory: ${{ steps.setup.outputs.source-path }}
       run: |
         echo "CPack Packaging:"
+        echo "  Build dir: ${{ steps.setup.outputs.build-path }}"
         echo "  Generator: ${{ inputs.cpack-generator-name }}"
         echo ""
         echo "::group::CPack Output"
