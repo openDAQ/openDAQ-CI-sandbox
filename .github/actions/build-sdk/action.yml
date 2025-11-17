@@ -361,7 +361,6 @@ runs:
     - name: Test
       if: inputs.ctest-enable == 'true'
       shell: bash
-      working-directory: ${{ steps.setup.outputs.source-path }}
       env:
         GTEST_OUTPUT: ${{ steps.setup.outputs.gtest-output }}
       run: |
@@ -371,6 +370,10 @@ runs:
         echo "  GTest output: ${{ steps.setup.outputs.gtest-output }}"
         echo "  CTest preset: ${{ inputs.ctest-preset }}"
         echo ""
+
+        # Change to source directory for preset discovery
+        cd "${{ steps.setup.outputs.source-path }}"
+
         echo "::group::CTest Output"
         ctest --test-dir "${{ steps.setup.outputs.build-path }}" \
           ${{ steps.setup.outputs.ctest-output-on-failure }} \
