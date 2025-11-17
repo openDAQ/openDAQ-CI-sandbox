@@ -276,6 +276,10 @@ runs:
             GTEST_XML_PATH="$BUILD_PATH/$GTEST_XML_PATH"
           fi
           mkdir -p "$GTEST_XML_PATH"
+          # On Windows, GTest needs Windows-style paths
+          if command -v cygpath &> /dev/null; then
+            GTEST_XML_PATH=$(cygpath -w "$GTEST_XML_PATH")
+          fi
           GTEST_OUTPUT="xml:$GTEST_XML_PATH/"
         else
           GTEST_OUTPUT=""

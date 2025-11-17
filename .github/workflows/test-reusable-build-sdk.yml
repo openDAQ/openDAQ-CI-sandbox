@@ -8,16 +8,30 @@ on:
 jobs:
   test-build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - runner: windows-latest
+            cmake-compiler: ""
             cmake-generator-name: Visual Studio 17 2022
             cpack-generator-name: NSIS
+            ccache-enable: false
+
+          - runner: windows-latest
+            cmake-compiler: >-
+              -DCMAKE_C_COMPILER=cl
+              -DCMAKE_CXX_COMPILER=cl
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            cmake-generator-name: Ninja
+            cpack-generator-name: ZIP
+            ccache-enable: true
 
     uses: ./.github/workflows/reusable-build-sdk.yml
     with:
       runner: ${{ matrix.runner }}
       path: openDAQ
+      cmake-compiler: ${{ matrix.cmake-compiler }}
       cmake-generator-name: ${{ matrix.cmake-generator-name }}
       cmake-config-args: >-
         -DOPENDAQ_ENABLE_TESTS=ON
@@ -38,3 +52,4 @@ jobs:
       ctest-preset: run_tests
       ctest-output-on-failure: true
       cpack-generator-name: ${{ matrix.cpack-generator-name }}
+      ccache-enable: ${{ matrix.ccache-enable }}
