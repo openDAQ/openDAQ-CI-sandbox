@@ -215,6 +215,14 @@ runs:
 
         # ===== CTEST CONFIGURATION =====
 
+        # Config argument
+        if [ -n "$CMAKE_CONFIG" ]; then
+          CTEST_CONFIG="-C $CMAKE_CONFIG"
+        else
+          CTEST_CONFIG=""
+        fi
+        echo "ctest-config=$CTEST_CONFIG" >> "$GITHUB_OUTPUT"
+
         # output-on-failure
         OUTPUT_ON_FAILURE="${{ inputs.ctest-output-on-failure }}"
         if [ "$OUTPUT_ON_FAILURE" = "true" ]; then
@@ -414,6 +422,7 @@ runs:
 
         echo "::group::CTest Output"
         ctest --test-dir "${{ steps.setup.outputs.build-path }}" \
+          ${{ steps.setup.outputs.ctest-config }} \
           ${{ steps.setup.outputs.ctest-output-on-failure }} \
           ${{ steps.setup.outputs.ctest-preset }} \
           ${{ steps.setup.outputs.ctest-tests-regex }} \
