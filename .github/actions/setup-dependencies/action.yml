@@ -41,7 +41,7 @@ runs:
       shell: bash
       run: |
         echo "::group::Installing macOS dependencies"
-        brew install ccache
+        brew install ccache coreutils
         echo "::endgroup::"
         echo "✓ macOS dependencies installed"
 
