@@ -149,9 +149,17 @@ runs:
         mkdir -p "$BUILD_PATH"
         BUILD_PATH=$(cd "$BUILD_PATH" && pwd)
 
+        # On Windows, actions/cache needs Windows-style paths
+        if command -v cygpath &> /dev/null; then
+          CACHE_BUILD_PATH=$(cygpath -w "$BUILD_PATH")
+        else
+          CACHE_BUILD_PATH="$BUILD_PATH"
+        fi
+
         echo "source-path=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
         echo "opendaq-working-dir=$OPENDAQ_WORKING_DIR" >> "$GITHUB_OUTPUT"
         echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
+        echo "cache-build-path=$CACHE_BUILD_PATH" >> "$GITHUB_OUTPUT"
 
         # ===== CMAKE CONFIGURATION =====
 
@@ -345,7 +353,7 @@ runs:
     - name: Restore build output
       uses: actions/cache@v4
       with:
-        path: ${{ steps.setup.outputs.build-path }}
+        path: ${{ steps.setup.outputs.cache-build-path }}
         key: build-${{ runner.os }}-${{ steps.setup.outputs.build-cache-key }}-${{ steps.read-version.outputs.commit-hash }}
         restore-keys: |
           build-${{ runner.os }}-${{ steps.setup.outputs.build-cache-key }}-
