@@ -358,18 +358,18 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ steps.ccache-config.outputs.dir }}
-        key: ccache-${{ runner.os }}-${{ hashFiles('**/*.c','**/*.cpp') }}
+        key: ccache-${{ env.ImageOS }}-${{ runner.arch }}-${{ hashFiles('**/*.c','**/*.cpp') }}
         restore-keys: |
-          ccache-${{ runner.os }}-
+          ccache-${{ env.ImageOS }}-${{ runner.arch }}-
 
     - name: Restore build output
       uses: actions/cache@v4
       with:
         path: ${{ steps.setup.outputs.cache-build-path }}
-        key: build-${{ runner.os }}-${{ steps.setup.outputs.build-cache-key }}-${{ steps.read-version.outputs.commit-hash }}
+        key: build-${{ env.ImageOS }}-${{ runner.arch }}-${{ steps.read-version.outputs.commit-hash }}-${{ steps.setup.outputs.build-cache-key }}
         restore-keys: |
-          build-${{ runner.os }}-${{ steps.setup.outputs.build-cache-key }}-
-          build-${{ runner.os }}-
+          build-${{ env.ImageOS }}-${{ runner.arch }}-${{ steps.read-version.outputs.commit-hash }}-
+          build-${{ env.ImageOS }}-${{ runner.arch }}-
 
     - name: Configure CMake
       shell: bash

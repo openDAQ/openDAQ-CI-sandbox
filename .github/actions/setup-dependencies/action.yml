@@ -42,6 +42,7 @@ runs:
       run: |
         echo "::group::Installing macOS dependencies"
         brew install ccache coreutils
+        command -v mono &>/dev/null || brew install mono
         echo "::endgroup::"
         echo "✓ macOS dependencies installed"
 

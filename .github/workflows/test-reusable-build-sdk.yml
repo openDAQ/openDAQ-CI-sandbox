@@ -47,6 +47,16 @@ jobs:
             cpack-generator-name: TGZ
             ccache-enable: true
 
+          - runner: macos-latest
+            cmake-compiler: >-
+              -DCMAKE_C_COMPILER=clang
+              -DCMAKE_CXX_COMPILER=clang++
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            cmake-generator-name: Ninja
+            cpack-generator-name: TGZ
+            ccache-enable: true
+
     uses: ./.github/workflows/reusable-build-sdk.yml
     with:
       runner: ${{ matrix.runner }}
