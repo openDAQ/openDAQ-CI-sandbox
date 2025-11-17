@@ -118,9 +118,17 @@ runs:
           # Windows: convert to Unix style first, then to absolute
           SOURCE_PATH=$(cygpath -u "$SOURCE_PATH")
           SOURCE_PATH=$(cd "$SOURCE_PATH" && pwd)
+          # On Windows runners, bash cannot start with Unix-style working directory
+          # so we need to normalize working directory separately for openDAQ steps
+          echo "Need to convert $SOURCE_PATH"
+          OPENDAQ_WORKING_DIR=$(cygpath -w "$SOURCE_PATH")
+          echo "  Convert $OPENDAQ_WORKING_DIR"
+
         else
           # Unix: convert to absolute
+          echo "No need to convert $SOURCE_PATH"
           SOURCE_PATH=$(cd "$SOURCE_PATH" && pwd)
+          OPENDAQ_WORKING_DIR="$SOURCE_PATH"
         fi
 
         # Set default build path AFTER source path is normalized
@@ -142,11 +150,8 @@ runs:
         BUILD_PATH=$(cd "$BUILD_PATH" && pwd)
 
         echo "source-path=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
+        echo "opendaq-working-dir=$OPENDAQ_WORKING_DIR" >> "$GITHUB_OUTPUT"
         echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
-
-        # Get git commit hash from source directory
-        GIT_HASH=$(cd "$SOURCE_PATH" && git rev-parse --short HEAD)
-        echo "git-hash=$GIT_HASH" >> "$GITHUB_OUTPUT"
 
         # ===== CMAKE CONFIGURATION =====
 
@@ -283,7 +288,7 @@ runs:
     - name: Read version and commit hash
       id: read-version
       shell: bash
-      working-directory: ${{ steps.setup.outputs.source-path }}
+      working-directory: ${{ steps.setup.outputs.opendaq-working-dir }}
       run: |
         # Read openDAQ version
         version=$(cat opendaq_version)
@@ -341,14 +346,14 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ steps.setup.outputs.build-path }}
-        key: build-${{ runner.os }}-${{ steps.setup.outputs.build-cache-key }}-${{ steps.setup.outputs.git-hash }}
+        key: build-${{ runner.os }}-${{ steps.setup.outputs.build-cache-key }}-${{ steps.read-version.outputs.commit-hash }}
         restore-keys: |
           build-${{ runner.os }}-${{ steps.setup.outputs.build-cache-key }}-
           build-${{ runner.os }}-
 
     - name: Configure CMake
       shell: bash
-      working-directory: ${{ steps.setup.outputs.source-path }}
+      working-directory: ${{ steps.setup.outputs.opendaq-working-dir }}
       run: |
         echo "CMake Configuration:"
         echo "  Source: ${{ steps.setup.outputs.source-path }}"
@@ -370,7 +375,7 @@ runs:
 
     - name: Build
       shell: bash
-      working-directory: ${{ steps.setup.outputs.source-path }}
+      working-directory: ${{ steps.setup.outputs.opendaq-working-dir }}
       run: |
         echo "CMake Build:"
         echo "  Build dir: ${{ steps.setup.outputs.build-path }}"
@@ -388,7 +393,7 @@ runs:
     - name: Test
       if: inputs.ctest-enable == 'true'
       shell: bash
-      working-directory: ${{ steps.setup.outputs.source-path }}
+      working-directory: ${{ steps.setup.outputs.opendaq-working-dir }}
       env:
         GTEST_OUTPUT: ${{ steps.setup.outputs.gtest-output }}
       run: |
@@ -414,7 +419,7 @@ runs:
     - name: Package
       if: inputs.cpack-generator-name != ''
       shell: bash
-      working-directory: ${{ steps.setup.outputs.source-path }}
+      working-directory: ${{ steps.setup.outputs.opendaq-working-dir }}
       run: |
         echo "CPack Packaging:"
         echo "  Build dir: ${{ steps.setup.outputs.build-path }}"
