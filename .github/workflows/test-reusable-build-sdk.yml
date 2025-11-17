@@ -27,6 +27,26 @@ jobs:
             cpack-generator-name: ZIP
             ccache-enable: true
 
+          - runner: ubuntu-latest
+            cmake-compiler: >-
+              -DCMAKE_C_COMPILER=gcc
+              -DCMAKE_CXX_COMPILER=g++
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            cmake-generator-name: Ninja
+            cpack-generator-name: DEB
+            ccache-enable: true
+
+          - runner: macos-13
+            cmake-compiler: >-
+              -DCMAKE_C_COMPILER=clang
+              -DCMAKE_CXX_COMPILER=clang++
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            cmake-generator-name: Ninja
+            cpack-generator-name: TGZ
+            ccache-enable: true
+
     uses: ./.github/workflows/reusable-build-sdk.yml
     with:
       runner: ${{ matrix.runner }}
