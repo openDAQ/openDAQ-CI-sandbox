@@ -131,6 +131,10 @@ runs:
         echo "source-path=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
         echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
 
+        # Get git commit hash from source directory
+        GIT_HASH=$(cd "$SOURCE_PATH" && git rev-parse --short HEAD)
+        echo "git-hash=$GIT_HASH" >> "$GITHUB_OUTPUT"
+
         # ===== CMAKE CONFIGURATION =====
 
         # Set default cmake-generator
@@ -177,6 +181,11 @@ runs:
         # Build parallel argument
         CMAKE_BUILD_PARALLEL="${{ inputs.cmake-parallel }}"
         echo "cmake-build-parallel=$CMAKE_BUILD_PARALLEL" >> "$GITHUB_OUTPUT"
+
+        # Build cache key hash (from all CMake configure parameters)
+        BUILD_KEY_STRING="${{ inputs.cmake-generator-name }}-${{ inputs.cmake-preset-name }}-$CMAKE_CONFIG-${{ inputs.cmake-compiler }}-${{ inputs.cmake-config-args }}"
+        BUILD_CACHE_KEY=$(echo -n "$BUILD_KEY_STRING" | sha256sum | cut -d' ' -f1)
+        echo "build-cache-key=$BUILD_CACHE_KEY" >> "$GITHUB_OUTPUT"
 
         # ===== CTEST CONFIGURATION =====
 
@@ -315,6 +324,15 @@ runs:
         restore-keys: |
           ccache-${{ runner.os }}-
 
+    - name: Restore build output
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.setup.outputs.build-path }}
+        key: build-${{ runner.os }}-${{ steps.setup.outputs.build-cache-key }}-${{ steps.setup.outputs.git-hash }}
+        restore-keys: |
+          build-${{ runner.os }}-${{ steps.setup.outputs.build-cache-key }}-
+          build-${{ runner.os }}-
+
     - name: Configure CMake
       shell: bash
       run: |
@@ -370,9 +388,6 @@ runs:
         echo "  GTest output: ${{ steps.setup.outputs.gtest-output }}"
         echo "  CTest preset: ${{ inputs.ctest-preset }}"
         echo ""
-
-        # Change to source directory for preset discovery
-        cd "${{ steps.setup.outputs.source-path }}"
 
         echo "::group::CTest Output"
         ctest --test-dir "${{ steps.setup.outputs.build-path }}" \
