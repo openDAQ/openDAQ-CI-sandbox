@@ -34,18 +34,10 @@ inputs:
     description: 'Additional CMake build arguments'
     required: false
     default: ''
-  cmake-parallel:
-    description: 'CMake parallel build flags (e.g., "-j 4" or "--parallel 4")'
-    required: false
-    default: ''
   ccache-enable:
     description: 'Enable compiler cache (works best with Ninja generator)'
     required: false
     default: 'false'
-  ccache-path:
-    description: 'Path for ccache directory'
-    required: false
-    default: ''
   ctest-enable:
     description: 'Run tests after build'
     required: false
@@ -68,17 +60,8 @@ inputs:
     description: 'Exclude tests matching regex'
     required: false
     default: ''
-  ctest-parallel:
-    description: 'Number of parallel test jobs (0 = sequential)'
-    required: false
-    type: number
-    default: 0
   gtest-output-xml-path:
     description: 'GTest XML output directory (empty = disabled)'
-    required: false
-    default: 'test_results'
-  ctest-output-junit:
-    description: 'CTest JUnit XML file path (empty = disabled)'
     required: false
     default: ''
   ctest-args:
@@ -105,165 +88,109 @@ runs:
       id: setup
       shell: bash
       run: |
+        # Initialize variable with default value
+        __daq_init_var() {
+          echo "${1:-$2}"
+        }
+
+        # Normalize path to Unix style
+        __daq_path_unix() {
+          if command -v cygpath &> /dev/null; then
+            cygpath -u "$1"
+          else
+            echo "$1"
+          fi
+        }
+
+        # Normalize path to Windows style
+        __daq_path_windows() {
+          if command -v cygpath &> /dev/null; then
+            cygpath -w "$1"
+          else
+            echo "$1"
+          fi
+        }
+
+        # Format variable into argument
+        __daq_fmt_var() {
+          local format="$1"
+          local value="$2"
+          [ -n "$value" ] && printf -- "$format" "$value" || echo ""
+        }
+
         # ===== PATH SETUP =====
 
         # Set default source path
-        SOURCE_PATH="${{ inputs.source-path }}"
-        if [ -z "$SOURCE_PATH" ]; then
-          SOURCE_PATH="."
-        fi
-
-        # Normalize and convert to absolute path
-        if command -v cygpath &> /dev/null; then
-          # Windows: convert to Unix style first, then to absolute
-          SOURCE_PATH=$(cygpath -u "$SOURCE_PATH")
-          SOURCE_PATH=$(cd "$SOURCE_PATH" && pwd)
-          # On Windows runners, bash cannot start with Unix-style working directory
-          # so we need to normalize working directory separately for openDAQ steps
-          OPENDAQ_WORKING_DIR=$(cygpath -w "$SOURCE_PATH")
-        else
-          # Unix: convert to absolute
-          echo "No need to convert $SOURCE_PATH"
-          SOURCE_PATH=$(cd "$SOURCE_PATH" && pwd)
-          OPENDAQ_WORKING_DIR="$SOURCE_PATH"
-        fi
+        SOURCE_PATH=$(__daq_init_var "${{ inputs.source-path }}" ".")
+        SOURCE_PATH=$(__daq_path_unix "$SOURCE_PATH")
 
         # Set default build path AFTER source path is normalized
-        BUILD_PATH="${{ inputs.build-path }}"
-        if [ -z "$BUILD_PATH" ]; then
-          BUILD_PATH="$SOURCE_PATH/build"
-        fi
-
-        # Normalize build path and convert to absolute
-        if command -v cygpath &> /dev/null; then
-          # Windows: convert to Unix style if user provided path
-          if [ -n "${{ inputs.build-path }}" ]; then
-            BUILD_PATH=$(cygpath -u "$BUILD_PATH")
-          fi
-        fi
+        BUILD_PATH=$(__daq_init_var "${{ inputs.build-path }}" "$SOURCE_PATH/build")
+        BUILD_PATH=$(__daq_path_unix "$BUILD_PATH")
 
         # Create build directory and convert to absolute path
         mkdir -p "$BUILD_PATH"
+
+        # Convert to absolute path
+        SOURCE_PATH=$(cd "$SOURCE_PATH" && pwd)
         BUILD_PATH=$(cd "$BUILD_PATH" && pwd)
 
-        # On Windows, actions/cache needs Windows-style paths
-        if command -v cygpath &> /dev/null; then
-          CACHE_BUILD_PATH=$(cygpath -w "$BUILD_PATH")
-        else
-          CACHE_BUILD_PATH="$BUILD_PATH"
-        fi
-
         echo "source-path=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
-        echo "opendaq-working-dir=$OPENDAQ_WORKING_DIR" >> "$GITHUB_OUTPUT"
         echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
-        echo "cache-build-path=$CACHE_BUILD_PATH" >> "$GITHUB_OUTPUT"
+
+        # ===== PLATFORM-SPECIFIC PATH NORMALIZATION =====
+
+        # On Windows runners, bash cannot start with Unix-style working directory
+        echo "opendaq-working-dir=$(__daq_path_windows "$SOURCE_PATH")" >> "$GITHUB_OUTPUT"
 
         # ===== CMAKE CONFIGURATION =====
 
-        # Set default cmake-generator
-        CMAKE_GENERATOR_NAME="${{ inputs.cmake-generator-name }}"
-        if [ -z "$CMAKE_GENERATOR_NAME" ]; then
-          CMAKE_GENERATOR_NAME="Ninja"
-        fi
-        CMAKE_GENERATOR="-G \"$CMAKE_GENERATOR_NAME\""
+        # CMake generator (no default - user must specify)
+        CMAKE_GENERATOR=$(__daq_fmt_var '-G "%s"' "${{ inputs.cmake-generator-name }}")
         echo "cmake-generator=$CMAKE_GENERATOR" >> "$GITHUB_OUTPUT"
 
-        # Set default cmake-config
+        # CMake config (no default - user must specify)
         CMAKE_CONFIG="${{ inputs.cmake-config }}"
-        if [ -z "$CMAKE_CONFIG" ]; then
-          CMAKE_CONFIG="Release"
-        fi
         echo "cmake-config=$CMAKE_CONFIG" >> "$GITHUB_OUTPUT"
 
         # Build type argument
-        CMAKE_BUILD_TYPE="-DCMAKE_BUILD_TYPE=$CMAKE_CONFIG"
+        CMAKE_BUILD_TYPE=$(__daq_fmt_var '-DCMAKE_BUILD_TYPE=%s' "$CMAKE_CONFIG")
         echo "cmake-build-type=$CMAKE_BUILD_TYPE" >> "$GITHUB_OUTPUT"
 
         # Set cmake-preset (as --preset flag or empty string)
-        CMAKE_PRESET_NAME="${{ inputs.cmake-preset-name }}"
-        if [ -z "$CMAKE_PRESET_NAME" ]; then
-          CMAKE_PRESET=""
-        else
-          CMAKE_PRESET="--preset $CMAKE_PRESET_NAME"
-        fi
+        CMAKE_PRESET=$(__daq_fmt_var '--preset %s' "${{ inputs.cmake-preset-name }}")
         echo "cmake-preset=$CMAKE_PRESET" >> "$GITHUB_OUTPUT"
-
-        # Set default ccache path
-        CCACHE_PATH="${{ inputs.ccache-path }}"
-        if [ -z "$CCACHE_PATH" ]; then
-          CCACHE_PATH="$SOURCE_PATH/.ccache"
-        fi
-        echo "ccache-path=$CCACHE_PATH" >> "$GITHUB_OUTPUT"
 
         # ===== CMAKE BUILD CONFIGURATION =====
 
         # Build config argument
-        CMAKE_BUILD_CONFIG="--config $CMAKE_CONFIG"
+        CMAKE_BUILD_CONFIG=$(__daq_fmt_var '--config %s' "$CMAKE_CONFIG")
         echo "cmake-build-config=$CMAKE_BUILD_CONFIG" >> "$GITHUB_OUTPUT"
-
-        # Build parallel argument
-        CMAKE_BUILD_PARALLEL="${{ inputs.cmake-parallel }}"
-        echo "cmake-build-parallel=$CMAKE_BUILD_PARALLEL" >> "$GITHUB_OUTPUT"
-
-        # Build cache key hash (from all CMake configure parameters)
-        BUILD_KEY_STRING="${{ inputs.cmake-generator-name }}-${{ inputs.cmake-preset-name }}-$CMAKE_CONFIG-${{ inputs.cmake-compiler }}-${{ inputs.cmake-config-args }}"
-        BUILD_CACHE_KEY=$(echo -n "$BUILD_KEY_STRING" | sha256sum | cut -d' ' -f1)
-        echo "build-cache-key=$BUILD_CACHE_KEY" >> "$GITHUB_OUTPUT"
 
         # ===== CTEST CONFIGURATION =====
 
         # Config argument
-        if [ -n "$CMAKE_CONFIG" ]; then
-          CTEST_CONFIG="-C $CMAKE_CONFIG"
-        else
-          CTEST_CONFIG=""
-        fi
+        CTEST_CONFIG=$(__daq_fmt_var '-C %s' "$CMAKE_CONFIG")
         echo "ctest-config=$CTEST_CONFIG" >> "$GITHUB_OUTPUT"
 
         # output-on-failure
-        OUTPUT_ON_FAILURE="${{ inputs.ctest-output-on-failure }}"
-        if [ "$OUTPUT_ON_FAILURE" = "true" ]; then
-          OUTPUT_ON_FAILURE_ARG="--output-on-failure"
-        else
-          OUTPUT_ON_FAILURE_ARG=""
+        CTEST_OUTPUT_ON_FAILURE=""
+        if [ "${{ inputs.ctest-output-on-failure }}" = "true" ]; then
+          CTEST_OUTPUT_ON_FAILURE="--output-on-failure"
         fi
-        echo "ctest-output-on-failure=$OUTPUT_ON_FAILURE_ARG" >> "$GITHUB_OUTPUT"
+        echo "ctest-output-on-failure=$CTEST_OUTPUT_ON_FAILURE" >> "$GITHUB_OUTPUT"
 
         # Preset
-        CTEST_PRESET="${{ inputs.ctest-preset }}"
-        if [ -n "$CTEST_PRESET" ]; then
-          CTEST_PRESET_ARG="--preset $CTEST_PRESET"
-        else
-          CTEST_PRESET_ARG=""
-        fi
-        echo "ctest-preset=$CTEST_PRESET_ARG" >> "$GITHUB_OUTPUT"
+        CTEST_PRESET=$(__daq_fmt_var '--preset %s' "${{ inputs.ctest-preset }}")
+        echo "ctest-preset=$CTEST_PRESET" >> "$GITHUB_OUTPUT"
 
         # Tests regex
-        TESTS_REGEX="${{ inputs.ctest-tests-regex }}"
-        if [ -n "$TESTS_REGEX" ]; then
-          TESTS_REGEX_ARG="--tests-regex $TESTS_REGEX"
-        else
-          TESTS_REGEX_ARG=""
-        fi
-        echo "ctest-tests-regex=$TESTS_REGEX_ARG" >> "$GITHUB_OUTPUT"
+        CTEST_TESTS_REGEX=$(__daq_fmt_var '--tests-regex %s' "${{ inputs.ctest-tests-regex }}")
+        echo "ctest-tests-regex=$CTEST_TESTS_REGEX" >> "$GITHUB_OUTPUT"
 
         # Exclude regex
-        EXCLUDE_REGEX="${{ inputs.ctest-exclude-regex }}"
-        if [ -n "$EXCLUDE_REGEX" ]; then
-          EXCLUDE_REGEX_ARG="--exclude-regex $EXCLUDE_REGEX"
-        else
-          EXCLUDE_REGEX_ARG=""
-        fi
-        echo "ctest-exclude-regex=$EXCLUDE_REGEX_ARG" >> "$GITHUB_OUTPUT"
-
-        # Parallel
-        PARALLEL="${{ inputs.ctest-parallel }}"
-        if [ "$PARALLEL" -gt 0 ] 2>/dev/null; then
-          PARALLEL_ARG="--parallel $PARALLEL"
-        else
-          PARALLEL_ARG=""
-        fi
-        echo "ctest-parallel=$PARALLEL_ARG" >> "$GITHUB_OUTPUT"
+        CTEST_EXCLUDE_REGEX=$(__daq_fmt_var '--exclude-regex %s' "${{ inputs.ctest-exclude-regex }}")
+        echo "ctest-exclude-regex=$CTEST_EXCLUDE_REGEX" >> "$GITHUB_OUTPUT"
 
         # GTest XML output - construct full value for GTEST_OUTPUT
         GTEST_XML_PATH="${{ inputs.gtest-output-xml-path }}"
@@ -274,29 +201,12 @@ runs:
           fi
           mkdir -p "$GTEST_XML_PATH"
           # On Windows, GTest needs Windows-style paths
-          if command -v cygpath &> /dev/null; then
-            GTEST_XML_PATH=$(cygpath -w "$GTEST_XML_PATH")
-          fi
+          GTEST_XML_PATH=$(__daq_path_windows "$GTEST_XML_PATH")
           GTEST_OUTPUT="xml:$GTEST_XML_PATH/"
         else
           GTEST_OUTPUT=""
         fi
         echo "gtest-output=$GTEST_OUTPUT" >> "$GITHUB_OUTPUT"
-
-        # CTest JUnit output (normalize if needed)
-        CTEST_JUNIT_PATH="${{ inputs.ctest-output-junit }}"
-        if [ -n "$CTEST_JUNIT_PATH" ]; then
-          # Make it relative to build path if not absolute
-          if [[ ! "$CTEST_JUNIT_PATH" = /* ]]; then
-            CTEST_JUNIT_PATH="$BUILD_PATH/$CTEST_JUNIT_PATH"
-          fi
-          # Create parent directory
-          mkdir -p "$(dirname "$CTEST_JUNIT_PATH")"
-          CTEST_JUNIT_ARG="--output-junit $CTEST_JUNIT_PATH"
-        else
-          CTEST_JUNIT_ARG=""
-        fi
-        echo "ctest-output-junit=$CTEST_JUNIT_ARG" >> "$GITHUB_OUTPUT"
 
         # Additional args
         CTEST_ARGS="${{ inputs.ctest-args }}"
@@ -322,51 +232,41 @@ runs:
       if: inputs.ccache-enable == 'true'
       id: ccache-config
       shell: bash
+      working-directory: ${{ steps.setup.outputs.opendaq-working-dir }}
       run: |
-        # Get ccache path from setup
-        CCACHE_PATH="${{ steps.setup.outputs.ccache-path }}"
-        SOURCE_PATH="${{ steps.setup.outputs.source-path }}"
+        # Set ccache directory
+        CCACHE_DIR=".ccache"
 
         # Create ccache directory if it doesn't exist
-        mkdir -p "$CCACHE_PATH"
+        mkdir -p "$CCACHE_DIR"
 
         # Convert to absolute path
-        SOURCE_PATH_ABS="$(cd "$SOURCE_PATH" && pwd)"
-        CCACHE_PATH_ABS="$(cd "$CCACHE_PATH" && pwd)"
+        CCACHE_DIR="$(cd "$CCACHE_DIR" && pwd)"
 
         # Windows-specific settings
         if command -v cygpath &> /dev/null; then
-          CCACHE_PATH_WIN="$(cygpath -w "$CCACHE_PATH_ABS")"
-          BASEDIR_PATH="$(cygpath -w "$SOURCE_PATH_ABS")"
-          echo "CCACHE_DIR=$CCACHE_PATH_WIN" >> "$GITHUB_ENV"
-          echo "CCACHE_BASEDIR=$BASEDIR_PATH" >> "$GITHUB_ENV"
+          CCACHE_DIR="$(cygpath -w "$CCACHE_DIR")"
+          CCACHE_BASEDIR="$(cygpath -w "$(pwd)")"
+          echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
+          echo "CCACHE_BASEDIR=$CCACHE_BASEDIR" >> "$GITHUB_ENV"
           echo "CCACHE_SLOPPINESS=pch_defines,time_macros" >> "$GITHUB_ENV"
-          echo "Using CCACHE_DIR: $CCACHE_PATH_WIN"
-          echo "Using CCACHE_BASEDIR: $BASEDIR_PATH"
-          echo "dir=$CCACHE_PATH_WIN" >> "$GITHUB_OUTPUT"
+          echo "Using CCACHE_DIR: $CCACHE_DIR"
+          echo "Using CCACHE_BASEDIR: $CCACHE_BASEDIR"
         else
-          echo "CCACHE_DIR=$CCACHE_PATH_ABS" >> "$GITHUB_ENV"
-          echo "Using CCACHE_DIR: $CCACHE_PATH_ABS"
-          echo "dir=$CCACHE_PATH_ABS" >> "$GITHUB_OUTPUT"
+          echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
+          echo "Using CCACHE_DIR: $CCACHE_DIR"
         fi
+
+        echo "ccache-dir=$CCACHE_DIR" >> "$GITHUB_OUTPUT"
 
     - name: Restore compiler cache
       if: inputs.ccache-enable == 'true'
       uses: actions/cache@v4
       with:
-        path: ${{ steps.ccache-config.outputs.dir }}
+        path: ${{ steps.ccache-config.outputs.ccache-dir }}
         key: ccache-${{ env.ImageOS }}-${{ runner.arch }}-${{ hashFiles('**/*.c','**/*.cpp') }}
         restore-keys: |
           ccache-${{ env.ImageOS }}-${{ runner.arch }}-
-
-    - name: Restore build output
-      uses: actions/cache@v4
-      with:
-        path: ${{ steps.setup.outputs.cache-build-path }}
-        key: build-${{ env.ImageOS }}-${{ runner.arch }}-${{ steps.read-version.outputs.commit-hash }}-${{ steps.setup.outputs.build-cache-key }}
-        restore-keys: |
-          build-${{ env.ImageOS }}-${{ runner.arch }}-${{ steps.read-version.outputs.commit-hash }}-
-          build-${{ env.ImageOS }}-${{ runner.arch }}-
 
     - name: Configure CMake
       shell: bash
@@ -397,12 +297,10 @@ runs:
         echo "CMake Build:"
         echo "  Build dir: ${{ steps.setup.outputs.build-path }}"
         echo "  Config: ${{ steps.setup.outputs.cmake-config }}"
-        echo "  Parallel: ${{ steps.setup.outputs.cmake-build-parallel }}"
         echo ""
         echo "::group::CMake Build Output"
         cmake --build "${{ steps.setup.outputs.build-path }}" \
           ${{ steps.setup.outputs.cmake-build-config }} \
-          ${{ steps.setup.outputs.cmake-build-parallel }} \
           ${{ inputs.cmake-build-args }}
         echo "::endgroup::"
         echo "✓ Build completed successfully"
@@ -428,8 +326,6 @@ runs:
           ${{ steps.setup.outputs.ctest-preset }} \
           ${{ steps.setup.outputs.ctest-tests-regex }} \
           ${{ steps.setup.outputs.ctest-exclude-regex }} \
-          ${{ steps.setup.outputs.ctest-parallel }} \
-          ${{ steps.setup.outputs.ctest-output-junit }} \
           ${{ steps.setup.outputs.ctest-args }}
         echo "::endgroup::"
         echo "✓ Tests completed"
