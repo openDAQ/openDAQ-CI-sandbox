@@ -60,10 +60,6 @@ inputs:
     description: 'Exclude tests matching regex'
     required: false
     default: ''
-  gtest-output-xml-path:
-    description: 'GTest XML output directory (empty = disabled)'
-    required: false
-    default: ''
   ctest-args:
     description: 'Additional CTest arguments'
     required: false
@@ -80,24 +76,12 @@ outputs:
   commit-hash:
     description: 'Short commit hash'
     value: ${{ steps.read-version.outputs.commit-hash }}
-  build-path-unix:
-    description: 'Unix-style absolute path to build directory (for bash commands)'
-    value: ${{ steps.setup.outputs.build-path-unix }}
-  build-path-windows:
-    description: 'Windows-style absolute path to build directory (empty on non-Windows)'
-    value: ${{ steps.setup.outputs.build-path-windows }}
-  package-path-unix:
-    description: 'Unix-style absolute path to packages directory (build/_packages)'
-    value: ${{ steps.setup.outputs.package-path-unix }}
-  package-path-windows:
-    description: 'Windows-style absolute path to packages directory (empty on non-Windows)'
-    value: ${{ steps.setup.outputs.package-path-windows }}
-  gtest-xml-report-path-unix:
-    description: 'Unix-style absolute path to GTest XML reports directory (empty if disabled)'
-    value: ${{ steps.setup.outputs.gtest-xml-report-path-unix }}
-  gtest-xml-report-path-windows:
-    description: 'Windows-style absolute path to GTest XML reports directory (empty if disabled or on non-Windows)'
-    value: ${{ steps.setup.outputs.gtest-xml-report-path-windows }}
+  package-path:
+    description: 'Native absolute path to packages directory (build/_packages)'
+    value: ${{ steps.setup.outputs.package-path }}
+  gtest-xml-path:
+    description: 'Native absolute path to GTest XML reports directory (test_results)'
+    value: ${{ steps.setup.outputs.gtest-xml-path }}
 
 runs:
   using: composite
@@ -106,94 +90,47 @@ runs:
       id: setup
       shell: bash
       run: |
-        # Initialize variable with default value
-        __daq_init_var() {
-          echo "${1:-$2}"
-        }
+        IS_WINDOWS=$(command -v cygpath &> /dev/null && echo "1" || echo "")
 
-        # Normalize path to Unix style
-        __daq_path_unix() {
-          if command -v cygpath &> /dev/null; then
-            cygpath -u "$1"
-          else
-            echo "$1"
-          fi
-        }
+        # Initialize variables
+        SOURCE_PATH="${{ inputs.source-path }}"
+        SOURCE_PATH="${SOURCE_PATH:-.}"
 
-        # Normalize path to Windows style
-        __daq_path_windows() {
-          if command -v cygpath &> /dev/null; then
-            cygpath -w "$1"
-          else
-            echo "$1"
-          fi
-        }
+        BUILD_PATH="${{ inputs.build-path }}"
+        BUILD_PATH="${BUILD_PATH:-$SOURCE_PATH/build}"
 
-        # ===== PATH SETUP =====
+        # Convert to Unix-style paths on Windows
+        if [ -n "$IS_WINDOWS" ]; then
+          SOURCE_PATH=$(cygpath -u "$SOURCE_PATH")
+          BUILD_PATH=$(cygpath -u "$BUILD_PATH")
+        fi
 
-        # Set default source and build paths if needed
-        SOURCE_PATH=$(__daq_init_var "${{ inputs.source-path }}" ".")
-        SOURCE_PATH=$(__daq_path_unix "$SOURCE_PATH")
-
-        BUILD_PATH=$(__daq_init_var "${{ inputs.build-path }}" "$SOURCE_PATH/build")
-        BUILD_PATH=$(__daq_path_unix "$BUILD_PATH")
-
-        # Create build directory and convert to absolute path
+        # Create directories and convert to absolute paths
         mkdir -p "$BUILD_PATH"
-
-        # Convert to absolute path
         SOURCE_PATH=$(cd "$SOURCE_PATH" && pwd)
         BUILD_PATH=$(cd "$BUILD_PATH" && pwd)
 
-        echo "source-path=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
-        echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
-
-        # ===== PLATFORM-SPECIFIC PATH NORMALIZATION =====
-
-        # On Windows runners, bash cannot start with Unix-style working directory
-        echo "opendaq-working-dir=$(__daq_path_windows "$SOURCE_PATH")" >> "$GITHUB_OUTPUT"
-
-        # ===== GTEST XML CONFIGURATION =====
-
-        # GTest XML output - construct full value for GTEST_OUTPUT
-        GTEST_XML_PATH="${{ inputs.gtest-output-xml-path }}"
-        if [ -n "$GTEST_XML_PATH" ]; then
-          # Make it relative to build path if not absolute
-          if [[ ! "$GTEST_XML_PATH" = /* ]]; then
-            GTEST_XML_PATH="$BUILD_PATH/$GTEST_XML_PATH"
-          fi
-          mkdir -p "$GTEST_XML_PATH"
-          # On Windows, GTest needs Windows-style paths
-          GTEST_XML_PATH=$(__daq_path_windows "$GTEST_XML_PATH")
-          GTEST_OUTPUT="xml:$GTEST_XML_PATH/"
-        else
-          GTEST_OUTPUT=""
-        fi
-        echo "gtest-output=$GTEST_OUTPUT" >> "$GITHUB_OUTPUT"
-
-        # ===== PACKAGE PATH OUTPUTS =====
-
-        # Set package path (where CPack creates packages)
+        # Derive additional paths
+        GTEST_XML_PATH="$BUILD_PATH/test_results"
         PACKAGE_PATH="$BUILD_PATH/_packages"
 
-        # Unix-style paths (always available)
-        echo "build-path-unix=$BUILD_PATH" >> "$GITHUB_OUTPUT"
-        echo "package-path-unix=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
-        echo "gtest-xml-report-path-unix=$GTEST_XML_PATH" >> "$GITHUB_OUTPUT"
+        # Create directories and convert to native paths on Windows
+        mkdir -p "$GTEST_XML_PATH"
+        if [ -n "$IS_WINDOWS" ]; then
+          GTEST_XML_PATH=$(cygpath -w "$GTEST_XML_PATH")
+          PACKAGE_PATH=$(cygpath -w "$PACKAGE_PATH")
+        fi
 
-        # Windows-style paths (empty on non-Windows)
-        if command -v cygpath &> /dev/null; then
-          echo "build-path-windows=$(__daq_path_windows "$BUILD_PATH")" >> "$GITHUB_OUTPUT"
-          echo "package-path-windows=$(__daq_path_windows "$PACKAGE_PATH")" >> "$GITHUB_OUTPUT"
-          if [ -n "$GTEST_XML_PATH" ]; then
-            echo "gtest-xml-report-path-windows=$(__daq_path_windows "$GTEST_XML_PATH")" >> "$GITHUB_OUTPUT"
-          else
-            echo "gtest-xml-report-path-windows=" >> "$GITHUB_OUTPUT"
-          fi
+        # Write outputs
+        echo "source-path=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
+        echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
+        echo "gtest-xml-path=$GTEST_XML_PATH" >> "$GITHUB_OUTPUT"
+        echo "package-path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
+
+        if [ -n "$IS_WINDOWS" ]; then
+          echo "opendaq-working-dir=$(cygpath -w "$SOURCE_PATH")" >> "$GITHUB_OUTPUT"
         else
-          echo "build-path-windows=" >> "$GITHUB_OUTPUT"
-          echo "package-path-windows=" >> "$GITHUB_OUTPUT"
-          echo "gtest-xml-report-path-windows=" >> "$GITHUB_OUTPUT"
+          echo "opendaq-working-dir=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Read version and commit hash
@@ -318,12 +255,12 @@ runs:
       shell: bash
       working-directory: ${{ steps.setup.outputs.opendaq-working-dir }}
       env:
-        GTEST_OUTPUT: ${{ steps.setup.outputs.gtest-output }}
+        GTEST_OUTPUT: xml:${{ steps.setup.outputs.gtest-xml-path }}/
       run: |
         echo "Running tests:"
         echo "  Source dir: ${{ steps.setup.outputs.source-path }}"
         echo "  Build dir: ${{ steps.setup.outputs.build-path }}"
-        echo "  GTest output: ${{ steps.setup.outputs.gtest-output }}"
+        echo "  GTest output: $GTEST_OUTPUT"
         echo "  CTest preset: ${{ inputs.ctest-preset }}"
         echo ""
 

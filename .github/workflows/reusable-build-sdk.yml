@@ -78,11 +78,6 @@ on:
         required: false
         type: string
         default: ''
-      gtest-output-xml-path:
-        description: 'GTest XML output directory (empty = disabled)'
-        required: false
-        type: string
-        default: ''
       cpack-generator-name:
         description: 'CPack generator name (e.g., "DEB", "NSIS", "TGZ", "ZIP")'
         required: false
@@ -134,7 +129,6 @@ jobs:
           ctest-tests-regex: ${{ inputs.ctest-tests-regex }}
           ctest-exclude-regex: ${{ inputs.ctest-exclude-regex }}
           ctest-args: ${{ inputs.ctest-args }}
-          gtest-output-xml-path: ${{ inputs.gtest-output-xml-path }}
           cpack-generator-name: ${{ inputs.cpack-generator-name }}
           ccache-enable: ${{ inputs.ccache-enable }}
 
@@ -151,10 +145,15 @@ jobs:
         if: inputs.cpack-generator-name != ''
         shell: bash
         env:
+          PACKAGE_PATH: ${{ steps.build.outputs.package-path }}
           ARTIFACT_FILENAME: ${{ steps.opendaq-filename.outputs.filename }}
-          PACKAGE_PATH: ${{ steps.build.outputs.package-path-unix }}
           CPACK_GENERATOR: ${{ inputs.cpack-generator-name }}
         run: |
+          # Convert native path to Unix for bash on Windows
+          if command -v cygpath &> /dev/null; then
+            PACKAGE_PATH=$(cygpath -u "$PACKAGE_PATH")
+          fi
+
           echo "Preparing Artifact:"
           echo "  Target: $ARTIFACT_FILENAME"
           echo ""
@@ -212,13 +211,13 @@ jobs:
         with:
           name: ${{ steps.opendaq-filename.outputs.filename }}
           path: ${{ steps.opendaq-filename.outputs.filename }}
-          retention-days: 30
+          retention-days: 7
 
       - name: Upload test reports
-        if: always() && inputs.ctest-enable && inputs.gtest-output-xml-path != ''
+        if: always() && inputs.ctest-enable
         uses: actions/upload-artifact@v4
         with:
           name: test-reports-${{ inputs.build-id != '' && inputs.build-id || inputs.runner }}
-          path: ${{ steps.build.outputs.gtest-xml-report-path-windows != '' && steps.build.outputs.gtest-xml-report-path-windows || steps.build.outputs.gtest-xml-report-path-unix }}
+          path: ${{ steps.build.outputs.gtest-xml-path }}
           retention-days: 7
           if-no-files-found: warn

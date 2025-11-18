@@ -65,7 +65,7 @@ jobs:
             cmake-generator-name: Ninja
             cpack-generator-name: TGZ
             ccache-enable: true
-            ctest-exclude-regex: 'SkipSamples|ReconnectWhileReading'
+            ctest-exclude-regex: 'test_reader'
 
     uses: ./.github/workflows/reusable-build-sdk.yml
     with:
@@ -92,7 +92,6 @@ jobs:
       ctest-enable: true
       ctest-preset: run_tests
       ctest-output-on-failure: true
-      gtest-output-xml-path: test_results
       cpack-generator-name: ${{ matrix.cpack-generator-name }}
       ccache-enable: ${{ matrix.ccache-enable }}
       ctest-exclude-regex: ${{ matrix.ctest-exclude-regex }}
