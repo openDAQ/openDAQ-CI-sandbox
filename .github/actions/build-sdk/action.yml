@@ -129,13 +129,6 @@ runs:
           fi
         }
 
-        # Format variable into argument
-        __daq_fmt_var() {
-          local format="$1"
-          local value="$2"
-          [ -n "$value" ] && printf -- "$format" "$value" || echo ""
-        }
-
         # ===== PATH SETUP =====
 
         # Set default source and build paths if needed
@@ -160,54 +153,7 @@ runs:
         # On Windows runners, bash cannot start with Unix-style working directory
         echo "opendaq-working-dir=$(__daq_path_windows "$SOURCE_PATH")" >> "$GITHUB_OUTPUT"
 
-        # ===== CMAKE CONFIGURATION =====
-
-        # CMake generator (no default - user must specify)
-        CMAKE_GENERATOR=$(__daq_fmt_var '-G "%s"' "${{ inputs.cmake-generator-name }}")
-        echo "cmake-generator=$CMAKE_GENERATOR" >> "$GITHUB_OUTPUT"
-
-        # CMake config (no default - user must specify)
-        CMAKE_CONFIG="${{ inputs.cmake-config }}"
-        echo "cmake-config=$CMAKE_CONFIG" >> "$GITHUB_OUTPUT"
-
-        # Build type argument
-        CMAKE_BUILD_TYPE=$(__daq_fmt_var '-DCMAKE_BUILD_TYPE=%s' "$CMAKE_CONFIG")
-        echo "cmake-build-type=$CMAKE_BUILD_TYPE" >> "$GITHUB_OUTPUT"
-
-        # Set cmake-preset (as --preset flag or empty string)
-        CMAKE_PRESET=$(__daq_fmt_var '--preset %s' "${{ inputs.cmake-preset-name }}")
-        echo "cmake-preset=$CMAKE_PRESET" >> "$GITHUB_OUTPUT"
-
-        # ===== CMAKE BUILD CONFIGURATION =====
-
-        # Build config argument
-        CMAKE_BUILD_CONFIG=$(__daq_fmt_var '--config %s' "$CMAKE_CONFIG")
-        echo "cmake-build-config=$CMAKE_BUILD_CONFIG" >> "$GITHUB_OUTPUT"
-
-        # ===== CTEST CONFIGURATION =====
-
-        # Config argument
-        CTEST_CONFIG=$(__daq_fmt_var '-C %s' "$CMAKE_CONFIG")
-        echo "ctest-config=$CTEST_CONFIG" >> "$GITHUB_OUTPUT"
-
-        # output-on-failure
-        CTEST_OUTPUT_ON_FAILURE=""
-        if [ "${{ inputs.ctest-output-on-failure }}" = "true" ]; then
-          CTEST_OUTPUT_ON_FAILURE="--output-on-failure"
-        fi
-        echo "ctest-output-on-failure=$CTEST_OUTPUT_ON_FAILURE" >> "$GITHUB_OUTPUT"
-
-        # Preset
-        CTEST_PRESET=$(__daq_fmt_var '--preset %s' "${{ inputs.ctest-preset }}")
-        echo "ctest-preset=$CTEST_PRESET" >> "$GITHUB_OUTPUT"
-
-        # Tests regex
-        CTEST_TESTS_REGEX=$(__daq_fmt_var '--tests-regex %s' "${{ inputs.ctest-tests-regex }}")
-        echo "ctest-tests-regex=$CTEST_TESTS_REGEX" >> "$GITHUB_OUTPUT"
-
-        # Exclude regex
-        CTEST_EXCLUDE_REGEX=$(__daq_fmt_var '--exclude-regex %s' "${{ inputs.ctest-exclude-regex }}")
-        echo "ctest-exclude-regex=$CTEST_EXCLUDE_REGEX" >> "$GITHUB_OUTPUT"
+        # ===== GTEST XML CONFIGURATION =====
 
         # GTest XML output - construct full value for GTEST_OUTPUT
         GTEST_XML_PATH="${{ inputs.gtest-output-xml-path }}"
@@ -224,10 +170,6 @@ runs:
           GTEST_OUTPUT=""
         fi
         echo "gtest-output=$GTEST_OUTPUT" >> "$GITHUB_OUTPUT"
-
-        # Additional args
-        CTEST_ARGS="${{ inputs.ctest-args }}"
-        echo "ctest-args=$CTEST_ARGS" >> "$GITHUB_OUTPUT"
 
         # ===== PACKAGE PATH OUTPUTS =====
 
@@ -302,9 +244,9 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ steps.ccache-config.outputs.ccache-dir }}
-        key: ccache-${{ env.ImageOS }}-${{ runner.arch }}-${{ hashFiles('**/*.c','**/*.cpp') }}
+        key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.c','**/*.cpp') }}
         restore-keys: |
-          ccache-${{ env.ImageOS }}-${{ runner.arch }}-
+          ccache-${{ runner.os }}-${{ runner.arch }}-
 
     - name: Configure CMake
       shell: bash
@@ -313,18 +255,36 @@ runs:
         echo "CMake Configuration:"
         echo "  Source: ${{ steps.setup.outputs.source-path }}"
         echo "  Build: ${{ steps.setup.outputs.build-path }}"
-        echo "  Generator: ${{ steps.setup.outputs.cmake-generator }}"
-        echo "  Preset: ${{ steps.setup.outputs.cmake-preset }}"
-        echo "  Config: ${{ steps.setup.outputs.cmake-config }}"
+        echo "  Generator: ${{ inputs.cmake-generator-name }}"
+        echo "  Preset: ${{ inputs.cmake-preset-name }}"
+        echo "  Config: ${{ inputs.cmake-config }}"
         echo ""
 
+        # Format CMake arguments
+        CMAKE_ARGS="-B ${{ steps.setup.outputs.build-path }}"
+
+        if [ -n "${{ inputs.cmake-generator-name }}" ]; then
+          CMAKE_ARGS="$CMAKE_ARGS -G \"${{ inputs.cmake-generator-name }}\""
+        fi
+
+        if [ -n "${{ inputs.cmake-preset-name }}" ]; then
+          CMAKE_ARGS="$CMAKE_ARGS --preset ${{ inputs.cmake-preset-name }}"
+        fi
+
+        if [ -n "${{ inputs.cmake-config }}" ]; then
+          CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_BUILD_TYPE=${{ inputs.cmake-config }}"
+        fi
+
+        if [ -n "${{ inputs.cmake-compiler }}" ]; then
+          CMAKE_ARGS="$CMAKE_ARGS ${{ inputs.cmake-compiler }}"
+        fi
+
+        if [ -n "${{ inputs.cmake-config-args }}" ]; then
+          CMAKE_ARGS="$CMAKE_ARGS ${{ inputs.cmake-config-args }}"
+        fi
+
         echo "::group::CMake Configuration Output"
-        cmake -B "${{ steps.setup.outputs.build-path }}" \
-          ${{ steps.setup.outputs.cmake-generator }} \
-          ${{ steps.setup.outputs.cmake-preset }} \
-          ${{ steps.setup.outputs.cmake-build-type }} \
-          ${{ inputs.cmake-compiler }} \
-          ${{ inputs.cmake-config-args }}
+        eval cmake $CMAKE_ARGS
         echo "::endgroup::"
         echo "✓ CMake configuration completed"
 
@@ -334,12 +294,22 @@ runs:
       run: |
         echo "CMake Build:"
         echo "  Build dir: ${{ steps.setup.outputs.build-path }}"
-        echo "  Config: ${{ steps.setup.outputs.cmake-config }}"
+        echo "  Config: ${{ inputs.cmake-config }}"
         echo ""
+
+        # Format CMake build arguments
+        CMAKE_BUILD_ARGS="--build ${{ steps.setup.outputs.build-path }}"
+
+        if [ -n "${{ inputs.cmake-config }}" ]; then
+          CMAKE_BUILD_ARGS="$CMAKE_BUILD_ARGS --config ${{ inputs.cmake-config }}"
+        fi
+
+        if [ -n "${{ inputs.cmake-build-args }}" ]; then
+          CMAKE_BUILD_ARGS="$CMAKE_BUILD_ARGS ${{ inputs.cmake-build-args }}"
+        fi
+
         echo "::group::CMake Build Output"
-        cmake --build "${{ steps.setup.outputs.build-path }}" \
-          ${{ steps.setup.outputs.cmake-build-config }} \
-          ${{ inputs.cmake-build-args }}
+        eval cmake $CMAKE_BUILD_ARGS
         echo "::endgroup::"
         echo "✓ Build completed successfully"
 
@@ -357,14 +327,35 @@ runs:
         echo "  CTest preset: ${{ inputs.ctest-preset }}"
         echo ""
 
+        # Format CTest arguments
+        CTEST_ARGS="--test-dir ${{ steps.setup.outputs.build-path }}"
+
+        if [ -n "${{ inputs.cmake-config }}" ]; then
+          CTEST_ARGS="$CTEST_ARGS -C ${{ inputs.cmake-config }}"
+        fi
+
+        if [ "${{ inputs.ctest-output-on-failure }}" = "true" ]; then
+          CTEST_ARGS="$CTEST_ARGS --output-on-failure"
+        fi
+
+        if [ -n "${{ inputs.ctest-preset }}" ]; then
+          CTEST_ARGS="$CTEST_ARGS --preset ${{ inputs.ctest-preset }}"
+        fi
+
+        if [ -n "${{ inputs.ctest-tests-regex }}" ]; then
+          CTEST_ARGS="$CTEST_ARGS --tests-regex '${{ inputs.ctest-tests-regex }}'"
+        fi
+
+        if [ -n "${{ inputs.ctest-exclude-regex }}" ]; then
+          CTEST_ARGS="$CTEST_ARGS --exclude-regex '${{ inputs.ctest-exclude-regex }}'"
+        fi
+
+        if [ -n "${{ inputs.ctest-args }}" ]; then
+          CTEST_ARGS="$CTEST_ARGS ${{ inputs.ctest-args }}"
+        fi
+
         echo "::group::CTest Output"
-        ctest --test-dir "${{ steps.setup.outputs.build-path }}" \
-          ${{ steps.setup.outputs.ctest-config }} \
-          ${{ steps.setup.outputs.ctest-output-on-failure }} \
-          ${{ steps.setup.outputs.ctest-preset }} \
-          ${{ steps.setup.outputs.ctest-tests-regex }} \
-          ${{ steps.setup.outputs.ctest-exclude-regex }} \
-          ${{ steps.setup.outputs.ctest-args }}
+        eval ctest $CTEST_ARGS
         echo "::endgroup::"
         echo "✓ Tests completed"
 
