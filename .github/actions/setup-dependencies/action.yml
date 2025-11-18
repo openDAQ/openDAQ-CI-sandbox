@@ -32,7 +32,12 @@ runs:
       shell: pwsh
       run: |
         Write-Host "::group::Installing Windows dependencies"
-        choco install ccache ninja nsis vswhere dotnet-sdk -y
+        choco install -y `
+            ccache `
+            ninja `
+            nsis `
+            vswhere `
+            dotnet-sdk
         Write-Host "::endgroup::"
         Write-Host "✓ Windows dependencies installed"
 
@@ -41,8 +46,11 @@ runs:
       shell: bash
       run: |
         echo "::group::Installing macOS dependencies"
-        brew install ccache coreutils
+        # Skip if mono already installed (preinstalled on macOS 13)
         command -v mono &>/dev/null || brew install mono
+        brew install \
+            ccache \
+            coreutils
         echo "::endgroup::"
         echo "✓ macOS dependencies installed"
 

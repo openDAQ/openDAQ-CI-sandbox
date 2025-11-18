@@ -120,10 +120,7 @@ runs:
           SOURCE_PATH=$(cd "$SOURCE_PATH" && pwd)
           # On Windows runners, bash cannot start with Unix-style working directory
           # so we need to normalize working directory separately for openDAQ steps
-          echo "Need to convert $SOURCE_PATH"
           OPENDAQ_WORKING_DIR=$(cygpath -w "$SOURCE_PATH")
-          echo "  Convert $OPENDAQ_WORKING_DIR"
-
         else
           # Unix: convert to absolute
           echo "No need to convert $SOURCE_PATH"
