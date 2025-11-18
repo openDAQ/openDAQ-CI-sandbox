@@ -120,11 +120,10 @@ runs:
 
         # ===== PATH SETUP =====
 
-        # Set default source path
+        # Set default source and build paths if needed
         SOURCE_PATH=$(__daq_init_var "${{ inputs.source-path }}" ".")
         SOURCE_PATH=$(__daq_path_unix "$SOURCE_PATH")
 
-        # Set default build path AFTER source path is normalized
         BUILD_PATH=$(__daq_init_var "${{ inputs.build-path }}" "$SOURCE_PATH/build")
         BUILD_PATH=$(__daq_path_unix "$BUILD_PATH")
 
@@ -234,13 +233,9 @@ runs:
       shell: bash
       working-directory: ${{ steps.setup.outputs.opendaq-working-dir }}
       run: |
-        # Set ccache directory
+        # Set ccache directory and create if it doesn't exist
         CCACHE_DIR=".ccache"
-
-        # Create ccache directory if it doesn't exist
         mkdir -p "$CCACHE_DIR"
-
-        # Convert to absolute path
         CCACHE_DIR="$(cd "$CCACHE_DIR" && pwd)"
 
         # Windows-specific settings

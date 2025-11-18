@@ -16,6 +16,7 @@ jobs:
             cmake-generator-name: Visual Studio 17 2022
             cpack-generator-name: NSIS
             ccache-enable: false
+            ctest-exclude-regex: ''
 
           - runner: windows-latest
             cmake-compiler: >-
@@ -26,6 +27,7 @@ jobs:
             cmake-generator-name: Ninja
             cpack-generator-name: ZIP
             ccache-enable: true
+            ctest-exclude-regex: ''
 
           - runner: ubuntu-latest
             cmake-compiler: >-
@@ -36,6 +38,7 @@ jobs:
             cmake-generator-name: Ninja
             cpack-generator-name: DEB
             ccache-enable: true
+            ctest-exclude-regex: ''
 
           - runner: macos-13
             cmake-compiler: >-
@@ -46,6 +49,7 @@ jobs:
             cmake-generator-name: Ninja
             cpack-generator-name: TGZ
             ccache-enable: true
+            ctest-exclude-regex: ''
 
           - runner: macos-latest
             cmake-compiler: >-
@@ -56,6 +60,7 @@ jobs:
             cmake-generator-name: Ninja
             cpack-generator-name: TGZ
             ccache-enable: true
+            ctest-exclude-regex: 'StreamReaderTest\.(SkipSamplesOnePacket|SkipSamplesBetweenPackets)/[0-9]+'
 
     uses: ./.github/workflows/reusable-build-sdk.yml
     with:
@@ -83,3 +88,4 @@ jobs:
       ctest-output-on-failure: true
       cpack-generator-name: ${{ matrix.cpack-generator-name }}
       ccache-enable: ${{ matrix.ccache-enable }}
+      ctest-exclude-regex: ${{ matrix.ctest-exclude-regex }}

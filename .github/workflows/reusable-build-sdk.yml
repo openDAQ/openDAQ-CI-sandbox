@@ -43,11 +43,6 @@ on:
         required: false
         type: string
         default: ''
-      ccache-enable:
-        description: 'Enable compiler cache (works best with Ninja generator)'
-        required: false
-        type: boolean
-        default: false
       ctest-enable:
         description: 'Run tests after build'
         required: false
@@ -73,23 +68,13 @@ on:
         required: false
         type: string
         default: ''
-      ctest-parallel:
-        description: 'Number of parallel test jobs (0 = sequential)'
-        required: false
-        type: number
-        default: 0
-      gtest-output-xml-path:
-        description: 'GTest XML output directory (empty = disabled)'
-        required: false
-        type: string
-        default: 'test_results'
-      ctest-output-junit:
-        description: 'CTest JUnit XML file path (empty = disabled)'
+      ctest-args:
+        description: 'Additional CTest arguments'
         required: false
         type: string
         default: ''
-      ctest-args:
-        description: 'Additional CTest arguments'
+      gtest-output-xml-path:
+        description: 'GTest XML output directory (empty = disabled)'
         required: false
         type: string
         default: ''
@@ -98,45 +83,17 @@ on:
         required: false
         type: string
         default: ''
+      ccache-enable:
+        description: 'Enable compiler cache (works best with Ninja generator)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build:
     runs-on: ${{ inputs.runner }}
 
     steps:
-      - name: Set defaults
-        id: defaults
-        shell: bash
-        run: |
-          # Set default path
-          PATH_VALUE="${{ inputs.path }}"
-          if [ -z "$PATH_VALUE" ]; then
-            PATH_VALUE="."
-          fi
-          echo "path=$PATH_VALUE" >> "$GITHUB_OUTPUT"
-
-          # Set default cmake-config-args
-          CMAKE_CONFIG_ARGS="${{ inputs.cmake-config-args }}"
-          if [ -z "$CMAKE_CONFIG_ARGS" ]; then
-            CMAKE_CONFIG_ARGS_ARRAY=(
-              "-DOPENDAQ_ENABLE_TESTS=OFF"
-              "-DOPENDAQ_BUILD_DOCUMENTATION=OFF"
-              "-DDAQSIMULATOR_ENABLE_SIMULATOR_APP=OFF"
-              "-DDAQMODULES_REF_FB_MODULE=OFF"
-              "-DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF"
-              "-DDAQMODULES_REF_DEVICE_MODULE=OFF"
-              "-DDAQMODULES_AUDIO_DEVICE_MODULE=OFF"
-              "-DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF"
-              "-DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF"
-              "-DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF"
-              "-DOPENDAQ_ENABLE_OPCUA=OFF"
-              "-DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF"
-              "-DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF"
-            )
-            CMAKE_CONFIG_ARGS="${CMAKE_CONFIG_ARGS_ARRAY[*]}"
-          fi
-          echo "cmake-config-args=$CMAKE_CONFIG_ARGS" >> "$GITHUB_OUTPUT"
-
       - name: Setup cmake
         uses: jwlawson/actions-setup-cmake@v2
         with:
@@ -149,34 +106,33 @@ jobs:
         uses: ./.github/actions/setup-dependencies
 
       - name: Checkout openDAQ
-        if: steps.defaults.outputs.path != '.'
+        if: inputs.path != '.'
         uses: actions/checkout@v4
         with:
           repository: openDAQ/openDAQ
           ref: ${{ inputs.ref }}
-          path: ${{ steps.defaults.outputs.path }}
+          path: ${{ inputs.path }}
 
       - name: Build SDK
         id: build
         uses: ./.github/actions/build-sdk
         with:
-          source-path: ${{ steps.defaults.outputs.path }}
+          source-path: ${{ inputs.path }}
           cmake-generator-name: ${{ inputs.cmake-generator-name }}
           cmake-preset-name: ${{ inputs.cmake-preset-name }}
           cmake-compiler: ${{ inputs.cmake-compiler }}
-          cmake-config-args: ${{ steps.defaults.outputs.cmake-config-args }}
+          cmake-config-args: ${{ inputs.cmake-config-args }}
           cmake-build-args: ${{ inputs.cmake-build-args }}
-          ccache-enable: ${{ inputs.ccache-enable }}
           ctest-enable: ${{ inputs.ctest-enable }}
           ctest-output-on-failure: ${{ inputs.ctest-output-on-failure }}
           ctest-preset: ${{ inputs.ctest-preset }}
           ctest-tests-regex: ${{ inputs.ctest-tests-regex }}
           ctest-exclude-regex: ${{ inputs.ctest-exclude-regex }}
-          ctest-parallel: ${{ inputs.ctest-parallel }}
-          gtest-output-xml-path: ${{ inputs.gtest-output-xml-path }}
-          ctest-output-junit: ${{ inputs.ctest-output-junit }}
           ctest-args: ${{ inputs.ctest-args }}
+          gtest-output-xml-path: ${{ inputs.gtest-output-xml-path }}
           cpack-generator-name: ${{ inputs.cpack-generator-name }}
+          ccache-enable: ${{ inputs.ccache-enable }}
+
 
       - name: Compose openDAQ framework filename
         if: inputs.cpack-generator-name != ''
@@ -191,7 +147,7 @@ jobs:
         shell: bash
         env:
           ARTIFACT_FILENAME: ${{ steps.opendaq-filename.outputs.filename }}
-          BUILD_PATH: ${{ steps.defaults.outputs.path }}/build
+          BUILD_PATH: ${{ inputs.path }}/build
         run: |
           echo "Preparing Artifact:"
           echo "  Target: $ARTIFACT_FILENAME"
