@@ -79,7 +79,7 @@ on:
         type: string
         default: ''
       cpack-generator-name:
-        description: 'CPack generator name (e.g., "DEB", "RPM", "NSIS", "TGZ", "ZIP")'
+        description: 'CPack generator name (e.g., "DEB", "NSIS", "TGZ", "ZIP")'
         required: false
         type: string
         default: ''
@@ -147,34 +147,57 @@ jobs:
         shell: bash
         env:
           ARTIFACT_FILENAME: ${{ steps.opendaq-filename.outputs.filename }}
-          BUILD_PATH: ${{ inputs.path }}/build
+          PACKAGE_PATH: ${{ steps.build.outputs.package-path-unix }}
+          CPACK_GENERATOR: ${{ inputs.cpack-generator-name }}
         run: |
           echo "Preparing Artifact:"
           echo "  Target: $ARTIFACT_FILENAME"
           echo ""
 
+          # Determine file extension based on CPack generator
+          case "$CPACK_GENERATOR" in
+            DEB)
+              PACKAGE_EXT="deb"
+              ;;
+            NSIS)
+              PACKAGE_EXT="exe"
+              ;;
+            TGZ)
+              PACKAGE_EXT="tar.gz"
+              ;;
+            ZIP)
+              PACKAGE_EXT="zip"
+              ;;
+            *)
+              echo "::warning::Unknown CPack generator '$CPACK_GENERATOR', using wildcard pattern"
+              PACKAGE_EXT="*"
+              ;;
+          esac
+
+          SEARCH_PATTERN="opendaq*.$PACKAGE_EXT"
+
           echo "::group::Searching for package file"
-          echo "Search directory: $BUILD_PATH/_packages"
-          echo "Search pattern: opendaq*"
-          ls -lah "$BUILD_PATH/_packages/" || echo "Directory not found or empty"
+          echo "Search directory: $PACKAGE_PATH"
+          echo "Search pattern: $SEARCH_PATTERN"
+          ls -lah "$PACKAGE_PATH/" || echo "Directory not found or empty"
           echo "::endgroup::"
 
-          source=$(find "$BUILD_PATH/_packages" -type f -iname 'opendaq*' | head -n1)
+          PACKAGE_FILE=$(find "$PACKAGE_PATH" -type f -iname "$SEARCH_PATTERN" | head -n1)
 
-          if [ -z "$source" ]; then
-            echo "::error::No package file found matching pattern 'opendaq*' in $BUILD_PATH/_packages"
+          if [ -z "$PACKAGE_FILE" ]; then
+            echo "::error::No package file found matching pattern '$SEARCH_PATTERN' in $PACKAGE_PATH"
             exit 1
           fi
 
-          echo "Found: $source ($(du -h "$source" | cut -f1))"
+          echo "Found: $PACKAGE_FILE ($(du -h "$PACKAGE_FILE" | cut -f1))"
 
-          cp "$source" "./$ARTIFACT_FILENAME"
+          cp "$PACKAGE_FILE" "./$ARTIFACT_FILENAME"
 
           if [ -f "./$ARTIFACT_FILENAME" ]; then
             echo "✓ Artifact prepared successfully"
             ls -lh "./$ARTIFACT_FILENAME"
           else
-            echo "::error::Failed to copy artifact from '$source' to '$ARTIFACT_FILENAME'"
+            echo "::error::Failed to copy artifact from '$PACKAGE_FILE' to '$ARTIFACT_FILENAME'"
             exit 1
           fi
 
@@ -185,3 +208,12 @@ jobs:
           name: ${{ steps.opendaq-filename.outputs.filename }}
           path: ${{ steps.opendaq-filename.outputs.filename }}
           retention-days: 30
+
+      - name: Upload test reports
+        if: always() && inputs.ctest-enable && inputs.gtest-output-xml-path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ inputs.runner }}
+          path: ${{ steps.build.outputs.gtest-xml-report-path-windows != '' && steps.build.outputs.gtest-xml-report-path-windows || steps.build.outputs.gtest-xml-report-path-unix }}
+          retention-days: 7
+          if-no-files-found: warn

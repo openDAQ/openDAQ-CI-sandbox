@@ -69,7 +69,7 @@ inputs:
     required: false
     default: ''
   cpack-generator-name:
-    description: 'CPack generator name (e.g., "DEB", "RPM", "NSIS", "TGZ", "ZIP")'
+    description: 'CPack generator name (e.g., "DEB", "NSIS", "TGZ", "ZIP")'
     required: false
     default: ''
 
@@ -80,6 +80,24 @@ outputs:
   commit-hash:
     description: 'Short commit hash'
     value: ${{ steps.read-version.outputs.commit-hash }}
+  build-path-unix:
+    description: 'Unix-style absolute path to build directory (for bash commands)'
+    value: ${{ steps.setup.outputs.build-path-unix }}
+  build-path-windows:
+    description: 'Windows-style absolute path to build directory (empty on non-Windows)'
+    value: ${{ steps.setup.outputs.build-path-windows }}
+  package-path-unix:
+    description: 'Unix-style absolute path to packages directory (build/_packages)'
+    value: ${{ steps.setup.outputs.package-path-unix }}
+  package-path-windows:
+    description: 'Windows-style absolute path to packages directory (empty on non-Windows)'
+    value: ${{ steps.setup.outputs.package-path-windows }}
+  gtest-xml-report-path-unix:
+    description: 'Unix-style absolute path to GTest XML reports directory (empty if disabled)'
+    value: ${{ steps.setup.outputs.gtest-xml-report-path-unix }}
+  gtest-xml-report-path-windows:
+    description: 'Windows-style absolute path to GTest XML reports directory (empty if disabled or on non-Windows)'
+    value: ${{ steps.setup.outputs.gtest-xml-report-path-windows }}
 
 runs:
   using: composite
@@ -210,6 +228,31 @@ runs:
         # Additional args
         CTEST_ARGS="${{ inputs.ctest-args }}"
         echo "ctest-args=$CTEST_ARGS" >> "$GITHUB_OUTPUT"
+
+        # ===== PACKAGE PATH OUTPUTS =====
+
+        # Set package path (where CPack creates packages)
+        PACKAGE_PATH="$BUILD_PATH/_packages"
+
+        # Unix-style paths (always available)
+        echo "build-path-unix=$BUILD_PATH" >> "$GITHUB_OUTPUT"
+        echo "package-path-unix=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
+        echo "gtest-xml-report-path-unix=$GTEST_XML_PATH" >> "$GITHUB_OUTPUT"
+
+        # Windows-style paths (empty on non-Windows)
+        if command -v cygpath &> /dev/null; then
+          echo "build-path-windows=$(__daq_path_windows "$BUILD_PATH")" >> "$GITHUB_OUTPUT"
+          echo "package-path-windows=$(__daq_path_windows "$PACKAGE_PATH")" >> "$GITHUB_OUTPUT"
+          if [ -n "$GTEST_XML_PATH" ]; then
+            echo "gtest-xml-report-path-windows=$(__daq_path_windows "$GTEST_XML_PATH")" >> "$GITHUB_OUTPUT"
+          else
+            echo "gtest-xml-report-path-windows=" >> "$GITHUB_OUTPUT"
+          fi
+        else
+          echo "build-path-windows=" >> "$GITHUB_OUTPUT"
+          echo "package-path-windows=" >> "$GITHUB_OUTPUT"
+          echo "gtest-xml-report-path-windows=" >> "$GITHUB_OUTPUT"
+        fi
 
     - name: Read version and commit hash
       id: read-version

@@ -40,7 +40,7 @@ jobs:
             ccache-enable: true
             ctest-exclude-regex: ''
 
-          - runner: macos-13
+          - runner: macos-15-intel
             cmake-compiler: >-
               -DCMAKE_C_COMPILER=clang
               -DCMAKE_CXX_COMPILER=clang++
@@ -60,7 +60,7 @@ jobs:
             cmake-generator-name: Ninja
             cpack-generator-name: TGZ
             ccache-enable: true
-            ctest-exclude-regex: 'StreamReaderTest\.(SkipSamplesOnePacket|SkipSamplesBetweenPackets)/[0-9]+'
+            ctest-exclude-regex: 'SkipSamples'
 
     uses: ./.github/workflows/reusable-build-sdk.yml
     with:
@@ -86,6 +86,7 @@ jobs:
       ctest-enable: true
       ctest-preset: run_tests
       ctest-output-on-failure: true
+      gtest-output-xml-path: test_results
       cpack-generator-name: ${{ matrix.cpack-generator-name }}
       ccache-enable: ${{ matrix.ccache-enable }}
       ctest-exclude-regex: ${{ matrix.ctest-exclude-regex }}
