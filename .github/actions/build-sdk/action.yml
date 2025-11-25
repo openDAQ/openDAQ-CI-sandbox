@@ -1,0 +1,119 @@
+name: Build openDAQ SDK
+description: Configure, build and test openDAQ SDK
+
+inputs:
+  cmake-generator:
+    description: 'CMake generator (e.g., "Ninja", "Visual Studio 17 2022")'
+    required: false
+    default: ''
+  cmake-config-preset:
+    description: 'CMake configure preset name'
+    required: false
+    default: ''
+  cmake-config-args:
+    description: 'Additional CMake configure arguments (e.g., -D flags)'
+    required: false
+    default: ''
+  cmake-build-type:
+    description: 'Build configuration (Release, Debug). Required for multi-config generators (Visual Studio)'
+    required: false
+    default: ''
+  enable-tests:
+    description: 'Run tests after build'
+    required: false
+    default: 'false'
+
+outputs:
+  gtest-xml-path:
+    description: 'Path to GTest XML reports directory'
+    value: ${{ steps.setup.outputs.gtest-xml-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup
+      id: setup
+      shell: bash
+      run: |
+        BUILD_PATH="build"
+        mkdir -p "$BUILD_PATH"
+        BUILD_PATH=$(cd "$BUILD_PATH" && pwd)
+
+        GTEST_XML_PATH="$BUILD_PATH/test_results"
+        mkdir -p "$GTEST_XML_PATH"
+
+        if command -v cygpath &> /dev/null; then
+          GTEST_XML_PATH=$(cygpath -w "$GTEST_XML_PATH")
+        fi
+
+        echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
+        echo "gtest-xml-path=$GTEST_XML_PATH" >> "$GITHUB_OUTPUT"
+
+    - name: Configure
+      shell: bash
+      env:
+        CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
+        CMAKE_GENERATOR: ${{ inputs.cmake-generator }}
+        CI_GIT_BRANCH: ${{ github.head_ref }}
+      run: |
+        # Determine generator: use input or default based on OS
+        if [ -z "$CMAKE_GENERATOR" ]; then
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            CMAKE_GENERATOR="Visual Studio 17 2022"
+          else
+            CMAKE_GENERATOR="Ninja"
+          fi
+        fi
+
+        CMAKE_ARGS=""
+        if [ -n "${{ inputs.cmake-config-preset }}" ]; then
+          CMAKE_ARGS="--preset ${{ inputs.cmake-config-preset }}"
+        fi
+
+        # Visual Studio specific options
+        if [[ "$CMAKE_GENERATOR" == "Visual Studio"* ]]; then
+          CMAKE_ARGS="$CMAKE_ARGS -DOPENDAQ_MSVC_SINGLE_PROCESS_BUILD=ON"
+        fi
+
+        if [ -n "$CMAKE_BUILD_TYPE" ]; then
+          CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE"
+        fi
+
+        CMAKE_ARGS="$CMAKE_ARGS -DCI_GIT_BRANCH=$CI_GIT_BRANCH"
+
+        echo "::group::CMake Configure"
+        cmake -B "${{ steps.setup.outputs.build-path }}" \
+          -G "$CMAKE_GENERATOR" $CMAKE_ARGS ${{ inputs.cmake-config-args }}
+        echo "::endgroup::"
+
+    - name: Build
+      shell: bash
+      env:
+        SHORT_SHA: ci # .NET bindings version suffix (e.g., 1.0.0-beta-ci)
+        CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
+      run: |
+        CMAKE_BUILD_ARGS=""
+        if [ -n "$CMAKE_BUILD_TYPE" ]; then
+          CMAKE_BUILD_ARGS="--config $CMAKE_BUILD_TYPE"
+        fi
+
+        echo "::group::CMake Build"
+        cmake --build "${{ steps.setup.outputs.build-path }}" $CMAKE_BUILD_ARGS
+        echo "::endgroup::"
+
+    - name: Test
+      if: inputs.enable-tests == 'true'
+      shell: bash
+      env:
+        GTEST_OUTPUT: xml:${{ steps.setup.outputs.gtest-xml-path }}/
+        CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
+      run: |
+        CTEST_ARGS=""
+        if [ -n "$CMAKE_BUILD_TYPE" ]; then
+          CTEST_ARGS="--build-config $CMAKE_BUILD_TYPE"
+        fi
+
+        echo "::group::CTest"
+        ctest --test-dir "${{ steps.setup.outputs.build-path }}" \
+          --preset run_tests --output-on-failure $CTEST_ARGS
+        echo "::endgroup::"
