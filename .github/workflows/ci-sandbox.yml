@@ -37,7 +37,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     name: ${{ matrix.name }}
     # ${{ }} expression syntax because of leading '!'
-    # if: ${{ ! github.event.pull_request.draft }}
+    if: ${{ ! github.event.pull_request.draft }}
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
@@ -115,45 +115,6 @@ jobs:
         # TODO: Remove this condition before merging to openDAQ/openDAQ
         if: github.repository == 'openDAQ/openDAQ'
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: |
-              3.8
-              3.9
-              3.10
-              3.11
-              3.12
-              3.13
-
-      - name: Setup cmake
-        uses: jwlawson/actions-setup-cmake@v2
-        with:
-          cmake-version: '4.0'
-
-      - name: Install NSIS
-        run: choco install nsis -y --no-progress
-
-      - name: Install ninja-build
-        if: matrix.cmake_generator == 'Ninja'
-        uses: seanmiddleditch/gha-setup-ninja@v5
-
-      # https://github.com/actions/runner-images/issues/10001
-      - name: Setup MSVC toolchain
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Remove outdated clang
-        shell: pwsh
-        run: mv 'C:\Program Files\LLVM' 'C:\Program Files\LLVM_old'
-
-      - name: Install Python dependencies
-        shell: pwsh
-        run: |
-          foreach($version in "${{ env.python_versions }}".split(" ")) {
-            Write-Output "Installing numpy for Python $version"
-            Invoke-Expression "py -$version -m pip install numpy"
-          }
 
       - name: Install Intel-LLVM compiler
         shell: powershell

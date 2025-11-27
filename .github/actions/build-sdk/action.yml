@@ -34,7 +34,18 @@ runs:
     - name: Setup
       id: setup
       shell: bash
+      env:
+        CMAKE_GENERATOR: ${{ inputs.cmake-generator }}
       run: |
+        # Determine generator: use input or default based on OS
+        if [ -z "$CMAKE_GENERATOR" ]; then
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            CMAKE_GENERATOR="Visual Studio 17 2022"
+          else
+            CMAKE_GENERATOR="Ninja"
+          fi
+        fi
+
         BUILD_PATH="build"
         mkdir -p "$BUILD_PATH"
         BUILD_PATH=$(cd "$BUILD_PATH" && pwd)
@@ -48,23 +59,62 @@ runs:
 
         echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
         echo "gtest-xml-path=$GTEST_XML_PATH" >> "$GITHUB_OUTPUT"
+        echo "cmake-generator=$CMAKE_GENERATOR" >> "$GITHUB_OUTPUT"
+
+    # NOTE: Keep python-version list in sync with PYTHON_VERSIONS in "Install Python dependencies" step
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: |
+            3.8
+            3.9
+            3.10
+            3.11
+            3.12
+            3.13
+
+    - name: Setup cmake
+      uses: jwlawson/actions-setup-cmake@v2
+      with:
+        cmake-version: '4.0'
+
+    - name: Install NSIS
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: choco install nsis -y --no-progress
+
+    - name: Install ninja-build
+      if: steps.setup.outputs.cmake-generator == 'Ninja'
+      uses: seanmiddleditch/gha-setup-ninja@v5
+
+    # https://github.com/actions/runner-images/issues/10001
+    - name: Setup MSVC toolchain
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Remove outdated clang
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: mv 'C:\Program Files\LLVM' 'C:\Program Files\LLVM_old'
+
+    - name: Install Python dependencies
+      shell: bash
+      env:
+        PYTHON_VERSIONS: "3.8 3.9 3.10 3.11 3.12 3.13"
+        PYTHON_CMD: ${{ runner.os == 'Windows' && 'py -' || 'python' }}
+      run: |
+        for version in $PYTHON_VERSIONS; do
+          echo "Installing numpy for Python $version"
+          $PYTHON_CMD$version -m pip install numpy
+        done
 
     - name: Configure
       shell: bash
       env:
         CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
-        CMAKE_GENERATOR: ${{ inputs.cmake-generator }}
+        CMAKE_GENERATOR: ${{ steps.setup.outputs.cmake-generator }}
         CI_GIT_BRANCH: ${{ github.head_ref }}
       run: |
-        # Determine generator: use input or default based on OS
-        if [ -z "$CMAKE_GENERATOR" ]; then
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            CMAKE_GENERATOR="Visual Studio 17 2022"
-          else
-            CMAKE_GENERATOR="Ninja"
-          fi
-        fi
-
         CMAKE_ARGS=""
         if [ -n "${{ inputs.cmake-config-preset }}" ]; then
           CMAKE_ARGS="--preset ${{ inputs.cmake-config-preset }}"
