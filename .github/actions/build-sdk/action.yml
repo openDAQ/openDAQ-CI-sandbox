@@ -26,40 +26,20 @@ inputs:
 outputs:
   gtest-xml-path:
     description: 'Path to GTest XML reports directory'
-    value: ${{ steps.setup.outputs.gtest-xml-path }}
+    value: ${{ steps.test.outputs.gtest-xml-path }}
 
 runs:
   using: composite
   steps:
-    - name: Setup
-      id: setup
+    - name: Check inputs
       shell: bash
       env:
         CMAKE_GENERATOR: ${{ inputs.cmake-generator }}
       run: |
-        # Determine generator: use input or default based on OS
         if [ -z "$CMAKE_GENERATOR" ]; then
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            CMAKE_GENERATOR="Visual Studio 17 2022"
-          else
-            CMAKE_GENERATOR="Ninja"
-          fi
+          echo "::error::✗ The cmake-generator input is not set."
+          exit 1
         fi
-
-        BUILD_PATH="build"
-        mkdir -p "$BUILD_PATH"
-        BUILD_PATH=$(cd "$BUILD_PATH" && pwd)
-
-        GTEST_XML_PATH="$BUILD_PATH/test_results"
-        mkdir -p "$GTEST_XML_PATH"
-
-        if command -v cygpath &> /dev/null; then
-          GTEST_XML_PATH=$(cygpath -w "$GTEST_XML_PATH")
-        fi
-
-        echo "build-path=$BUILD_PATH" >> "$GITHUB_OUTPUT"
-        echo "gtest-xml-path=$GTEST_XML_PATH" >> "$GITHUB_OUTPUT"
-        echo "cmake-generator=$CMAKE_GENERATOR" >> "$GITHUB_OUTPUT"
 
     # NOTE: Keep python-version list in sync with PYTHON_VERSIONS in "Install Python dependencies" step
     - name: Set up Python
@@ -72,6 +52,7 @@ runs:
             3.11
             3.12
             3.13
+            3.14
 
     - name: Setup cmake
       uses: jwlawson/actions-setup-cmake@v2
@@ -84,7 +65,7 @@ runs:
       run: choco install nsis -y --no-progress
 
     - name: Install ninja-build
-      if: steps.setup.outputs.cmake-generator == 'Ninja'
+      if: inputs.cmake-generator == 'Ninja'
       uses: seanmiddleditch/gha-setup-ninja@v5
 
     # https://github.com/actions/runner-images/issues/10001
@@ -100,21 +81,32 @@ runs:
     - name: Install Python dependencies
       shell: bash
       env:
-        PYTHON_VERSIONS: "3.8 3.9 3.10 3.11 3.12 3.13"
         PYTHON_CMD: ${{ runner.os == 'Windows' && 'py -' || 'python' }}
       run: |
-        for version in $PYTHON_VERSIONS; do
+        echo "PYTHON_CMD=$PYTHON_CMD"
+        echo "RUNNER_OS=$RUNNER_OS"
+        PYTHON_VERSIONS=(3.8 3.9 3.10 3.11 3.12 3.13 3.14)
+        echo "PYTHON_VERSIONS=${PYTHON_VERSIONS[*]}"
+        for version in "${PYTHON_VERSIONS[@]}"; do
           echo "Installing numpy for Python $version"
+          echo "Running: $PYTHON_CMD$version -m pip install numpy"
           $PYTHON_CMD$version -m pip install numpy
         done
+        echo "Done installing Python dependencies"
 
     - name: Configure
+      id: cmake-config
       shell: bash
       env:
         CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
-        CMAKE_GENERATOR: ${{ steps.setup.outputs.cmake-generator }}
+        CMAKE_GENERATOR: ${{ inputs.cmake-generator }}
         CI_GIT_BRANCH: ${{ github.head_ref }}
       run: |
+        CMAKE_BUILD_PATH="build"
+        mkdir -p "$CMAKE_BUILD_PATH"
+        CMAKE_BUILD_PATH=$(cd "$CMAKE_BUILD_PATH" && pwd)
+        echo "build-path=$CMAKE_BUILD_PATH" >> "$GITHUB_OUTPUT"
+
         CMAKE_ARGS=""
         if [ -n "${{ inputs.cmake-config-preset }}" ]; then
           CMAKE_ARGS="--preset ${{ inputs.cmake-config-preset }}"
@@ -132,8 +124,7 @@ runs:
         CMAKE_ARGS="$CMAKE_ARGS -DCI_GIT_BRANCH=$CI_GIT_BRANCH"
 
         echo "::group::CMake Configure"
-        cmake -B "${{ steps.setup.outputs.build-path }}" \
-          -G "$CMAKE_GENERATOR" $CMAKE_ARGS ${{ inputs.cmake-config-args }}
+        cmake -B "$CMAKE_BUILD_PATH" -G "$CMAKE_GENERATOR" $CMAKE_ARGS ${{ inputs.cmake-config-args }}
         echo "::endgroup::"
 
     - name: Build
@@ -141,6 +132,7 @@ runs:
       env:
         SHORT_SHA: ci # .NET bindings version suffix (e.g., 1.0.0-beta-ci)
         CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
+        CMAKE_BUILD_PATH: ${{ steps.cmake-config.outputs.build-path }}
       run: |
         CMAKE_BUILD_ARGS=""
         if [ -n "$CMAKE_BUILD_TYPE" ]; then
@@ -148,22 +140,32 @@ runs:
         fi
 
         echo "::group::CMake Build"
-        cmake --build "${{ steps.setup.outputs.build-path }}" $CMAKE_BUILD_ARGS
+        cmake --build "$CMAKE_BUILD_PATH" $CMAKE_BUILD_ARGS
         echo "::endgroup::"
 
     - name: Test
+      id: test
       if: inputs.enable-tests == 'true'
       shell: bash
       env:
-        GTEST_OUTPUT: xml:${{ steps.setup.outputs.gtest-xml-path }}/
         CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
+        CMAKE_BUILD_PATH: ${{ steps.cmake-config.outputs.build-path }}
       run: |
+        GTEST_XML_PATH="$CMAKE_BUILD_PATH/test_results"
+        mkdir -p "$GTEST_XML_PATH"
+
+        if command -v cygpath &> /dev/null; then
+          GTEST_XML_PATH=$(cygpath -w "$GTEST_XML_PATH")
+        fi
+
+        export GTEST_OUTPUT="xml:$GTEST_XML_PATH/"
+        echo "gtest-xml-path=$GTEST_XML_PATH" >> "$GITHUB_OUTPUT"
+
         CTEST_ARGS=""
         if [ -n "$CMAKE_BUILD_TYPE" ]; then
           CTEST_ARGS="--build-config $CMAKE_BUILD_TYPE"
         fi
 
         echo "::group::CTest"
-        ctest --test-dir "${{ steps.setup.outputs.build-path }}" \
-          --preset run_tests --output-on-failure $CTEST_ARGS
+        ctest --test-dir "$CMAKE_BUILD_PATH" --preset run_tests --output-on-failure $CTEST_ARGS
         echo "::endgroup::"
