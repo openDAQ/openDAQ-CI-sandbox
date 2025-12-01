@@ -2,6 +2,10 @@ name: Build openDAQ SDK
 description: Configure, build and test openDAQ SDK
 
 inputs:
+  additional-dependencies:
+    description: 'Additional packages to install (apt on Linux, choco on Windows)'
+    required: false
+    default: ''
   cmake-generator:
     description: 'CMake generator (e.g., "Ninja", "Visual Studio 17 2022")'
     required: false
@@ -22,6 +26,14 @@ inputs:
     description: 'Run tests after build'
     required: false
     default: 'false'
+  python-versions:
+    description: 'Python version(s) to install (space-separated for multiple versions)'
+    required: false
+    default: ''
+  ctest-exclude-regex:
+    description: 'Regular expression to exclude tests from running'
+    required: false
+    default: ''
 
 outputs:
   gtest-xml-path:
@@ -50,6 +62,23 @@ runs:
       uses: jwlawson/actions-setup-cmake@v2
       with:
         cmake-version: '4.0'
+
+    - name: Install Windows dependencies
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: choco install nsis ${{ inputs.additional-dependencies }} -y --no-progress
+
+    - name: Install Linux dependencies
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        apt-get update && apt-get install -y --no-install-recommends \
+          ${{ inputs.additional-dependencies || '' }} \
+          awscli unzip \
+          lld curl \
+          python3-dev python3-numpy python3-distutils python3-pip \
+          mono-runtime libmono-system-json-microsoft4.0-cil libmono-system-data4.0-cil \
+          libx11-dev libxi-dev libxcursor-dev libxrandr-dev libgl-dev libudev-dev libfreetype6-dev
 
     - name: Install ninja-build
       if: inputs.cmake-generator == 'Ninja'
@@ -124,6 +153,7 @@ runs:
       env:
         CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
         CMAKE_BUILD_PATH: ${{ steps.cmake-config.outputs.build-path }}
+        CTEST_EXCLUDE_REGEX: ${{ inputs.ctest-exclude-regex }}
       run: |
         GTEST_XML_PATH="$CMAKE_BUILD_PATH/test_results"
         mkdir -p "$GTEST_XML_PATH"
@@ -138,6 +168,9 @@ runs:
         CTEST_ARGS=""
         if [ -n "$CMAKE_BUILD_TYPE" ]; then
           CTEST_ARGS="--build-config $CMAKE_BUILD_TYPE"
+        fi
+        if [ -n "$CTEST_EXCLUDE_REGEX" ]; then
+          CTEST_ARGS="$CTEST_ARGS --exclude-regex $CTEST_EXCLUDE_REGEX"
         fi
 
         echo "::group::CTest"
