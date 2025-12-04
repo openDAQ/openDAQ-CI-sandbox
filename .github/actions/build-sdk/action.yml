@@ -22,10 +22,6 @@ inputs:
     description: 'Run tests after build'
     required: false
     default: 'false'
-  python-versions:
-    description: 'Python version(s) to install (newline-separated for multiple versions)'
-    required: false
-    default: ''
 
 outputs:
   gtest-xml-path:
@@ -45,31 +41,16 @@ runs:
           exit 1
         fi
 
-    - name: Prepare Python versions
-      id: python-versions
-      if: inputs.python-versions != ''
-      shell: bash
-      run: |
-        VERSIONS=$(echo '${{ inputs.python-versions }}' | tr ' ' '\n' | grep -v '^$')
-        echo "list<<EOF" >> $GITHUB_OUTPUT
-        echo "$VERSIONS" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-
     - name: Set up Python
-      if: inputs.python-versions != ''
+      if: inputs.python-version != ''
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ steps.python-versions.outputs.list }}
+        python-version: ${{ inputs.python-versions }}
 
     - name: Setup cmake
       uses: jwlawson/actions-setup-cmake@v2
       with:
         cmake-version: '4.0'
-
-    - name: Install NSIS
-      if: runner.os == 'Windows'
-      shell: pwsh
-      run: choco install nsis -y --no-progress
 
     - name: Install ninja-build
       if: inputs.cmake-generator == 'Ninja'
@@ -80,23 +61,12 @@ runs:
       if: runner.os == 'Windows'
       uses: ilammy/msvc-dev-cmd@v1
 
-    - name: Remove outdated clang
-      if: runner.os == 'Windows'
-      shell: pwsh
-      run: mv 'C:\Program Files\LLVM' 'C:\Program Files\LLVM_old'
-
     - name: Install Python dependencies
-      if: inputs.python-versions != ''
       shell: bash
-      env:
-        PYTHON_CMD: ${{ runner.os == 'Windows' && 'py -' || 'python' }}
       run: |
-        PYTHON_VERSIONS='${{ inputs.python-versions }}'
-        echo "Installing numpy for Python versions: $PYTHON_VERSIONS"
-        for version in $PYTHON_VERSIONS; do
-          echo "Running: $PYTHON_CMD$version -m pip install numpy"
-          $PYTHON_CMD$version -m pip install numpy
-        done
+        PYTHON_VERSION=$(python --version)
+        echo "Installing numpy for Python versions: $PYTHON_VERSION"
+        python -m pip install numpy
         echo "Done installing Python dependencies"
 
     - name: Configure
