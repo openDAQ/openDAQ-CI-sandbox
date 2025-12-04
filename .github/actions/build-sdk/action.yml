@@ -42,10 +42,9 @@ runs:
         fi
 
     - name: Set up Python
-      if: inputs.python-version != ''
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ inputs.python-versions }}
+        python-version: '3.14'
 
     - name: Setup cmake
       uses: jwlawson/actions-setup-cmake@v2
