@@ -181,7 +181,7 @@ jobs:
           path: ${{ steps.build.outputs.gtest-xml-path || env.test_path }}
 
   build_linux:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     name: ${{ matrix.name }}
     # ${{ }} expression syntax because of leading '!'
     # if: ${{ ! github.event.pull_request.draft }}
@@ -194,10 +194,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Ubuntu 24.04 gcc-12 Release
+          - name: Ubuntu 22.04 gcc-12 Release
+            runner: ubuntu-22.04
             cmake_generator: Ninja
             cmake_build_type: Release
             cmake_defines: -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
+          - name: Ubuntu Latest gcc-12 Release
+            runner: ubuntu-latest
+            cmake_generator: Ninja
+            cmake_build_type: Release
+            cmake_defines: -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 -DDAQMODULES_PARQUET_RECORDER_MODULE=ON  
           # - name: Ubuntu 22.04 gcc-12 Debug
           #   image: ubuntu:22.04
           #   cmake_generator: Ninja
@@ -212,10 +218,11 @@ jobs:
           #   apt_packages: g++-9
           #   cc: gcc-9
           #   cxx: g++-9
-          # - name: Ubuntu 24.04 clang-16 Release
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Release
-          #   cmake_defines: -DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16
+          - name: Ubuntu Latest clang-16 Release
+            runner: ubuntu-latest
+            cmake_generator: Ninja
+            cmake_build_type: Release
+            cmake_defines: -DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16 -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
 
     steps:
 
@@ -248,7 +255,6 @@ jobs:
           cmake-config-args: ${{ matrix.cmake_defines }}
           cmake-build-type: ${{ matrix.cmake_build_type }}
           enable-tests: true
-          ctest-exclude-regex: regression_test
 
       - name: Upload test results
         if: always()
