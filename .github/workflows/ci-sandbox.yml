@@ -37,7 +37,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     name: ${{ matrix.name }}
     # ${{ }} expression syntax because of leading '!'
-    if: ${{ ! github.event.pull_request.draft }}
+    # if: ${{ ! github.event.pull_request.draft }}
+    if: false
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
@@ -179,34 +180,6 @@ jobs:
           name: Unit Test Results (${{ matrix.name }})
           path: ${{ steps.build.outputs.gtest-xml-path || env.test_path }}
 
-      - name: Package
-        if: matrix.cpack != ''
-        working-directory: ./build
-        run: cpack -C ${{ matrix.cmake_build_type }} -G ${{ matrix.cpack }}
-
-      - name: Upload package
-        if: matrix.cpack != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: Packages (${{ matrix.name }})
-          path: ${{ env.package_path }}
-          retention-days: 7
-
-      - name: Upload binaries for .NET Bindings NuGet package
-        # "There can be only one for now."
-        if: matrix.name == 'Windows VS 2022 x64 Release'
-        env:
-          dotnetBuildPath: "${{ env.dotnet_bin_path }}/${{ matrix.cmake_generator_platform }}/${{ matrix.cmake_build_type }}"
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.windows_x64_artifact }}
-          path: |
-            ${{ env.dotnetBuildPath }}
-            !${{ env.dotnetBuildPath }}/**/*.json
-            !${{ env.dotnetBuildPath }}/**/*.exe
-          #if-no-files-found: error # 'warn' or 'ignore' are also available, defaults to `warn`
-          retention-days: 1
-
   build_linux:
     runs-on: ubuntu-latest
     name: ${{ matrix.name }}
@@ -221,15 +194,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Ubuntu 22.04 gcc-12 Release
-            image: ubuntu:22.04
+          - name: Ubuntu 24.04 gcc-12 Release
             cmake_generator: Ninja
             cmake_build_type: Release
-            cmake_defines: -DOPENDAQ_ENABLE_REGRESSION_TESTS=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
-            apt_packages: g++-12
-            cc: gcc-12
-            cxx: g++-12
-            cpack: DEB
+            cmake_defines: -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
           # - name: Ubuntu 22.04 gcc-12 Debug
           #   image: ubuntu:22.04
           #   cmake_generator: Ninja
@@ -237,71 +205,19 @@ jobs:
           #   apt_packages: g++-12
           #   cc: gcc-12
           #   cxx: g++-12
-          #   cpack: DEB
-          - name: Ubuntu 22.04 gcc-9 Release
-            image: ubuntu:22.04
-            cmake_generator: Ninja
-            cmake_build_type: Release
-            cmake_defines: -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF
-            apt_packages: g++-9
-            cc: gcc-9
-            cxx: g++-9
-          - name: Ubuntu 22.04 clang-14 Release
-            image: ubuntu:22.04
-            cmake_generator: Ninja
-            cmake_build_type: Release
-            cmake_defines: -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-            apt_packages: clang++-14
-            cc: clang-14
-            cxx: clang++-14
-         # - name: Ubuntu 22.04 Intel-LLVM Release
-         #   image: ubuntu:22.04
-         #   cmake_generator: Ninja
-         #   cmake_build_type: Release
-         #   cmake_defines: -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-         #   apt_packages: intel-oneapi-compiler-dpcpp-cpp
-         #   cc: icx
-         #   cxx: icpx
-          # - name: Ubuntu 22.04 clang-14 libc++ Release
-            # image: ubuntu:22.04
-            # cmake_generator: Ninja
-            # cmake_build_type: Release
-            # cmake_defines: -DCMAKE_CXX_FLAGS=-stdlib=libc++
-            # apt_packages: clang++-14 libc++-14-dev libc++abi-14-dev
-            # cc: clang-14
-            # cxx: clang++-14
-            # cpack: ZIP
-          - name: Ubuntu 22.04 preinstalled packages
-            image: ubuntu:22.04
-            cmake_generator: Ninja
-            cmake_build_type: Release
-            cmake_defines: -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-            apt_packages: g++ googletest libfmt-dev libsfml-dev libspdlog-dev libtsl-ordered-map-dev libxxhash-dev pybind11-dev rapidjson-dev
-            cc: gcc
-            cxx: g++
-            cpack: DEB
-
-    container:
-      image: ${{ matrix.image }}
-      env:
-        TZ: Europe/Berlin
-        DEBIAN_FRONTEND: noninteractive
-        CC: ${{ matrix.cc }}
-        CXX: ${{ matrix.cxx }}
-
-    outputs:
-      # trick for reusable workflow in dotnet_bindings because cannot use env context in "with:"
-        test_path: ${{ env.test_path }}
-        linux_x64_artifact_name: ${{ env.linux_x64_artifact }}
+          # - name: Ubuntu 22.04 gcc-9 Release
+          #   cmake_generator: Ninja
+          #   cmake_build_type: Release
+          #   cmake_defines: -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF
+          #   apt_packages: g++-9
+          #   cc: gcc-9
+          #   cxx: g++-9
+          # - name: Ubuntu 24.04 clang-16 Release
+          #   cmake_generator: Ninja
+          #   cmake_build_type: Release
+          #   cmake_defines: -DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16
 
     steps:
-      - name: Install basic dependencies
-        run: |
-          apt-get update
-          apt-get install -y git openssh-client
-
-      - name: Disable git safe directory checks
-        run : git config --global --add safe.directory '*'
 
       # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
       - name: Checkout openDAQ
@@ -322,17 +238,6 @@ jobs:
         run: cp -r _ci-sandbox/.github/actions .github/
       # TODO: End of sandbox-only steps
 
-      - name: Add Intel oneAPI apt repo
-        if: matrix.name == 'Ubuntu 22.04 Intel-LLVM Release'
-        run: |
-          apt-get install -y wget gnupg
-          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
-            | gpg --dearmor \
-            | tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
-          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
-            | tee /etc/apt/sources.list.d/oneapi.list
-          apt-get update
-
       - name: Build and Test
         id: build
         if: matrix.name != 'Ubuntu 22.04 Intel-LLVM Release'
@@ -344,7 +249,6 @@ jobs:
           cmake-build-type: ${{ matrix.cmake_build_type }}
           enable-tests: true
           ctest-exclude-regex: regression_test
-          additional-dependencies: ${{ matrix.apt_packages }}
 
       - name: Upload test results
         if: always()
@@ -352,31 +256,3 @@ jobs:
         with:
           name: Unit Test Results (${{ matrix.name }})
           path: ${{ env.build_path }}/test_results
-
-      - name: Package
-        if: matrix.cpack != ''
-        working-directory: ./build
-        run: cpack -C ${{ matrix.cmake_build_type }} -G ${{ matrix.cpack }}
-
-      - name: Upload package
-        if: matrix.cpack != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: Packages (${{ matrix.name }})
-          path: ${{ env.package_path }}
-          retention-days: 7
-
-      - name: Upload binaries for .NET Bindings NuGet package
-        # "There can be only one."
-        if: matrix.name == 'Ubuntu 22.04 gcc-12 Release'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.linux_x64_artifact }}
-          path: |
-            ${{ env.build_path }}/bin/*.so
-            !${{ env.build_path }}/**/opendaq.cpython*
-            !${{ env.build_path }}/**/*_test_dll.so
-          # the exclusion filter does not work and the online-help does not explain
-          # most probably a pattern *xxx.yy does not work, only x*
-          #if-no-files-found: error # 'warn' or 'ignore' are also available, defaults to `warn`
-          retention-days: 1
