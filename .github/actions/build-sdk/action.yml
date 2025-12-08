@@ -96,6 +96,11 @@ runs:
         python -m pip install numpy
         echo "Done installing Python dependencies"
 
+    - name: Remove clang-tidy to avoid conflicts
+      if: runner.os == 'Linux'
+      shell: bash
+      run: sudo rm -f /usr/bin/clang-tidy* || true
+
     - name: Configure
       id: cmake-config
       shell: bash
