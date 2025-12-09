@@ -85,26 +85,39 @@ runs:
           mono-runtime libmono-system-json-microsoft4.0-cil libmono-system-data4.0-cil \
           libx11-dev libxi-dev libxcursor-dev libxrandr-dev libgl-dev libudev-dev libfreetype6-dev
 
+    # TODO: +++ Remove ccache related steps:
     - name: Calculate ccache key
       if: runner.os == 'Linux'
       id: ccache-key
       shell: bash
+      env:
+        CMAKE_CONFIG_ARGS: ${{ inputs.cmake-config-args }}
       run: |
         CCACHE_DIR="${{ github.workspace }}/.ccache"
-        HASH=$(echo "${{ inputs.cmake-config-args }}" | sha256sum | cut -d' ' -f1 | head -c 16)
-        echo "hash=$HASH" >> "$GITHUB_OUTPUT"
         echo "dir=$CCACHE_DIR" >> "$GITHUB_OUTPUT"
         echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
+
+        # Get distro and version (e.g., ubuntu-22.04)
+        DISTRO=$(lsb_release -is | tr '[:upper:]' '[:lower:]')
+        VERSION=$(lsb_release -rs)
+        echo "distro=${DISTRO}-${VERSION}" >> "$GITHUB_OUTPUT"
+
+        # Extract compiler from cmake-config-args (e.g., gcc-12, clang-14)
+        COMPILER=$(echo "$CMAKE_CONFIG_ARGS" | grep -oP 'CMAKE_CXX_COMPILER=\K[^\s]+' | sed 's/+//g' || echo "unknown")
+        echo "compiler=$COMPILER" >> "$GITHUB_OUTPUT"
+
+        # Short commit hash
+        SHORT_SHA=$(echo "${{ github.sha }}" | head -c 7)
+        echo "short-sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
 
     - name: Setup ccache
       if: runner.os == 'Linux'
       uses: actions/cache@v4
       with:
         path: ${{ steps.ccache-key.outputs.dir }}
-        key: ccache-linux-${{ inputs.cmake-build-type }}-${{ steps.ccache-key.outputs.hash }}-${{ github.sha }}
+        key: ccache-${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.short-sha }}
         restore-keys: |
-          ccache-linux-${{ inputs.cmake-build-type }}-${{ steps.ccache-key.outputs.hash }}-
-          ccache-linux-${{ inputs.cmake-build-type }}-
+          ccache-${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.compiler }}-
 
     - name: Configure ccache
       if: runner.os == 'Linux'
@@ -114,6 +127,7 @@ runs:
         ccache --set-config=max_size=2G
         ccache --set-config=compression=true
         ccache -z  # Zero statistics
+    # TODO: --- Remove ccache related steps:
 
     - name: Install ninja-build
       if: inputs.cmake-generator == 'Ninja' && runner.os != 'Linux'
