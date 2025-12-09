@@ -190,6 +190,28 @@ runs:
         ccache -s
         echo "::endgroup::"
 
+    - name: Grant Linux capabilities to test executables
+      if: runner.os == 'Linux' && inputs.enable-tests == 'true'
+      shell: bash
+      env:
+        CMAKE_BUILD_PATH: ${{ steps.cmake-config.outputs.build-path }}
+      run: |
+        echo "::group::Grant CAP_NET_RAW"
+        # Grant capability to test binaries that use raw sockets 
+        # (e.g. ICMP ping for reachability checks)
+        TESTS=(
+          test_device_modules
+          test_opcua_device_modules
+        )
+        for name in "${TESTS[@]}"; do
+          test="$CMAKE_BUILD_PATH/bin/$name"
+          if [ -f "$test" ]; then
+            sudo setcap cap_net_raw=ep "$test"
+            echo "Granted CAP_NET_RAW to $test"
+          fi
+        done
+        echo "::endgroup::"
+
     - name: Test
       id: test
       if: inputs.enable-tests == 'true'
@@ -218,11 +240,5 @@ runs:
         fi
 
         echo "::group::CTest"
-        # TODO: Remove this if statement
-        # On Linux, run with sudo to allow raw sockets (ICMP ping for reachability tests)
-        if [[ "$RUNNER_OS" == "Linux" ]] && command -v sudo &> /dev/null; then
-          sudo -E ctest --test-dir "$CMAKE_BUILD_PATH" --preset run_tests --output-on-failure $CTEST_ARGS
-        else
-          ctest --test-dir "$CMAKE_BUILD_PATH" --preset run_tests --output-on-failure $CTEST_ARGS
-        fi
+        ctest --test-dir "$CMAKE_BUILD_PATH" --preset run_tests --output-on-failure $CTEST_ARGS
         echo "::endgroup::"
