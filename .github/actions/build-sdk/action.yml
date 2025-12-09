@@ -81,9 +81,39 @@ runs:
         $SUDO apt-get update && $SUDO apt-get install -y --no-install-recommends \
           ${{ inputs.additional-dependencies || '' }} \
           unzip \
-          lld curl \
+          lld curl ccache \
           mono-runtime libmono-system-json-microsoft4.0-cil libmono-system-data4.0-cil \
           libx11-dev libxi-dev libxcursor-dev libxrandr-dev libgl-dev libudev-dev libfreetype6-dev
+
+    - name: Calculate ccache key
+      if: runner.os == 'Linux'
+      id: ccache-key
+      shell: bash
+      run: |
+        CCACHE_DIR="${{ github.workspace }}/.ccache"
+        HASH=$(echo "${{ inputs.cmake-config-args }}" | sha256sum | cut -d' ' -f1 | head -c 16)
+        echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+        echo "dir=$CCACHE_DIR" >> "$GITHUB_OUTPUT"
+        echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
+
+    - name: Setup ccache
+      if: runner.os == 'Linux'
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.ccache-key.outputs.dir }}
+        key: ccache-linux-${{ inputs.cmake-build-type }}-${{ steps.ccache-key.outputs.hash }}-${{ github.sha }}
+        restore-keys: |
+          ccache-linux-${{ inputs.cmake-build-type }}-${{ steps.ccache-key.outputs.hash }}-
+          ccache-linux-${{ inputs.cmake-build-type }}-
+
+    - name: Configure ccache
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        ccache --set-config=cache_dir="$CCACHE_DIR"
+        ccache --set-config=max_size=2G
+        ccache --set-config=compression=true
+        ccache -z  # Zero statistics
 
     - name: Install ninja-build
       if: inputs.cmake-generator == 'Ninja' && runner.os != 'Linux'
@@ -152,6 +182,14 @@ runs:
         cmake --build "$CMAKE_BUILD_PATH" $CMAKE_BUILD_ARGS
         echo "::endgroup::"
 
+    - name: Show ccache statistics
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        echo "::group::ccache statistics"
+        ccache -s
+        echo "::endgroup::"
+
     - name: Test
       id: test
       if: inputs.enable-tests == 'true'
@@ -181,9 +219,9 @@ runs:
 
         echo "::group::CTest"
         # TODO: Remove this if statement
-        # On Linux, run only the problematic test with sudo to check ping permissions
+        # On Linux, run with sudo to allow raw sockets (ICMP ping for reachability tests)
         if [[ "$RUNNER_OS" == "Linux" ]] && command -v sudo &> /dev/null; then
-          sudo -E ctest --test-dir "$CMAKE_BUILD_PATH" --output-on-failure -R "TestDiscoveryReachabilityAfterConnect"
+          sudo -E ctest --test-dir "$CMAKE_BUILD_PATH" --preset run_tests --output-on-failure $CTEST_ARGS
         else
           ctest --test-dir "$CMAKE_BUILD_PATH" --preset run_tests --output-on-failure $CTEST_ARGS
         fi
