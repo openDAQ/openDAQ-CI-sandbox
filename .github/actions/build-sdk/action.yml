@@ -54,6 +54,7 @@ runs:
         fi
 
     - name: Set up Python
+      if: runner.os != 'Linux'
       uses: actions/setup-python@v5
       with:
         python-version: '3.14'
@@ -72,7 +73,12 @@ runs:
       if: runner.os == 'Linux'
       shell: bash
       run: |
-        sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+        # Use sudo if available (native runner), otherwise run directly (container)
+        SUDO=""
+        if command -v sudo &> /dev/null; then
+          SUDO="sudo"
+        fi
+        $SUDO apt-get update && $SUDO apt-get install -y --no-install-recommends \
           ${{ inputs.additional-dependencies || '' }} \
           unzip \
           lld curl \
@@ -80,7 +86,7 @@ runs:
           libx11-dev libxi-dev libxcursor-dev libxrandr-dev libgl-dev libudev-dev libfreetype6-dev
 
     - name: Install ninja-build
-      if: inputs.cmake-generator == 'Ninja'
+      if: inputs.cmake-generator == 'Ninja' && runner.os != 'Linux'
       uses: seanmiddleditch/gha-setup-ninja@v5
 
     # https://github.com/actions/runner-images/issues/10001
@@ -89,17 +95,13 @@ runs:
       uses: ilammy/msvc-dev-cmd@v1
 
     - name: Install Python dependencies
+      if: runner.os != 'Linux'
       shell: bash
       run: |
         PYTHON_VERSION=$(python --version)
         echo "Installing numpy for Python versions: $PYTHON_VERSION"
         python -m pip install numpy
         echo "Done installing Python dependencies"
-
-    - name: Remove clang-tidy to avoid conflicts
-      if: runner.os == 'Linux'
-      shell: bash
-      run: sudo rm -f /usr/bin/clang-tidy* || true
 
     - name: Configure
       id: cmake-config
