@@ -1,0 +1,60 @@
+name: Test ccache-setup action
+
+on:
+  push:
+    branches: [actions/ccache-setup]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            compiler: g++-12
+          - os: ubuntu-24.04-arm
+            compiler: g++-12
+          - os: macos-latest
+            compiler: clang++
+          - os: macos-15-intel
+            compiler: clang++
+          - os: windows-latest
+            compiler: cl
+    runs-on: ${{ matrix.os }}
+    name: Test on ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run ccache-setup
+        id: ccache
+        uses: ./.github/actions/ccache-setup
+        with:
+          cmake-config-args: '-DCMAKE_CXX_COMPILER=${{ matrix.compiler }}'
+          cmake-build-type: Release
+          cache-key-prefix: test
+
+      - name: Verify ccache installed
+        shell: bash
+        run: |
+          echo "=== ccache version ==="
+          ccache --version
+
+      - name: Verify environment
+        shell: bash
+        run: |
+          echo "=== CCACHE_DIR ==="
+          echo "$CCACHE_DIR"
+
+          echo "=== Cache key ==="
+          echo "${{ steps.ccache.outputs.cache-key }}"
+
+          echo "=== Cache hit ==="
+          echo "${{ steps.ccache.outputs.cache-hit }}"
+
+      - name: Verify ccache configuration
+        shell: bash
+        run: |
+          echo "=== ccache config ==="
+          ccache -p | grep -E '(cache_dir|max_size|compression)'
