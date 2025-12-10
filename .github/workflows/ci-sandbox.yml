@@ -215,7 +215,7 @@ jobs:
             runner: ubuntu-latest
             cmake_generator: Ninja
             cmake_build_type: Release
-            apt_packages: g++-12 ninja-build python3-dev python3-numpy
+            apt_packages: g++-12
             cmake_defines: -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
           # - name: Ubuntu Latest gcc-12 Release
           #   runner: ubuntu-latest
@@ -240,7 +240,7 @@ jobs:
             runner: ubuntu-latest
             cmake_generator: Ninja
             cmake_build_type: Release
-            apt_packages: clang-14 ninja-build python3-dev python3-numpy
+            apt_packages: clang-14
             cmake_defines: -DCMAKE_C_COMPILER=clang-14 -DCMAKE_CXX_COMPILER=clang++-14 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
     # container:

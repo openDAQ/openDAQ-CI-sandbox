@@ -54,7 +54,6 @@ runs:
         fi
 
     - name: Set up Python
-      if: runner.os != 'Linux'
       uses: actions/setup-python@v5
       with:
         python-version: '3.14'
@@ -73,20 +72,15 @@ runs:
       if: runner.os == 'Linux'
       shell: bash
       run: |
-        # Use sudo if available (native runner), otherwise run directly (container)
-        SUDO=""
-        if command -v sudo &> /dev/null; then
-          SUDO="sudo"
-        fi
-        $SUDO apt-get update && $SUDO apt-get install -y --no-install-recommends \
+        sudo apt-get update && sudo apt-get install -y --no-install-recommends \
           ${{ inputs.additional-dependencies || '' }} \
           unzip \
-          lld curl ccache \
+          lld curl \
           mono-runtime libmono-system-json-microsoft4.0-cil libmono-system-data4.0-cil \
           libx11-dev libxi-dev libxcursor-dev libxrandr-dev libgl-dev libudev-dev libfreetype6-dev
 
     - name: Install ninja-build
-      if: inputs.cmake-generator == 'Ninja' && runner.os != 'Linux'
+      if: inputs.cmake-generator == 'Ninja'
       uses: seanmiddleditch/gha-setup-ninja@v5
 
     # https://github.com/actions/runner-images/issues/10001
@@ -95,11 +89,9 @@ runs:
       uses: ilammy/msvc-dev-cmd@v1
 
     - name: Install Python dependencies
-      if: runner.os != 'Linux'
       shell: bash
       run: |
-        PYTHON_VERSION=$(python --version)
-        echo "Installing numpy for Python versions: $PYTHON_VERSION"
+        echo "Installing numpy for Python versions: $(python --version)"
         python -m pip install numpy
         echo "Done installing Python dependencies"
 
