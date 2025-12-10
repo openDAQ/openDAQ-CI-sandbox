@@ -257,7 +257,7 @@ jobs:
         run: cp -r _ci-sandbox/.github/actions .github/
 
       - name: Setup ccache
-        uses: ./.github/actions/ccache-setup
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
         with:
           cmake-config-args: ${{ matrix.cmake_defines }}
           cmake-build-type: ${{ matrix.cmake_build_type }}
