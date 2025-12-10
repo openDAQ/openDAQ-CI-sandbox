@@ -38,7 +38,6 @@ jobs:
     name: ${{ matrix.name }}
     # ${{ }} expression syntax because of leading '!'
     # if: ${{ ! github.event.pull_request.draft }}
-    if: false
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
@@ -129,7 +128,7 @@ jobs:
         run: choco install nsis -y --no-progress
 
       - name: Build and Test
-        id: build
+        id: build-and-test
         if: matrix.name != 'Windows Intel-LLVM Release'
         uses: ./.github/actions/build-sdk
         with:
@@ -178,27 +177,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Unit Test Results (${{ matrix.name }})
-          path: ${{ steps.build.outputs.gtest-xml-path || env.test_path }}
-
-  check_ping:
-    runs-on: ubuntu-latest
-    name: Check ping allowed
-
-    steps:
-      - name: Check ping permissions
-        run: |
-          sysctl net.ipv4.ping_group_range
-          id
-          ping -c 1 127.0.0.1 || echo "Ping localhost failed"
-          # Check ping to real interface
-          hostname -I
-          ping -c 1 $(hostname -I | awk '{print $1}') || echo "Ping real IP failed"
-          # Check ping capabilities
-          getcap /bin/ping || echo "No capabilities"
-          ls -la /bin/ping
+          path: ${{ steps.build-and-test.outputs.gtest-xml-path }}
 
   build_linux:
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-latest
     name: ${{ matrix.name }}
     # ${{ }} expression syntax because of leading '!'
     # if: ${{ ! github.event.pull_request.draft }}
@@ -211,8 +193,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Ubuntu 22.04 gcc-12 Release
-            runner: ubuntu-latest
+          - name: Ubuntu Latest gcc-12 Release
             cmake_generator: Ninja
             cmake_build_type: Release
             apt_packages: g++-12
@@ -236,8 +217,7 @@ jobs:
           #   apt_packages: g++-9
           #   cc: gcc-9
           #   cxx: g++-9
-          - name: Ubuntu 22.04 clang-14 Release
-            runner: ubuntu-latest
+          - name: Ubuntu Latest clang-14 Release
             cmake_generator: Ninja
             cmake_build_type: Release
             apt_packages: clang-14
@@ -284,8 +264,7 @@ jobs:
       # TODO: End of sandbox-only steps
 
       - name: Build and Test
-        id: build
-        if: matrix.name != 'Ubuntu 22.04 Intel-LLVM Release'
+        id: build-and-test
         uses: ./.github/actions/build-sdk
         with:
           cmake-generator: ${{ matrix.cmake_generator }}
@@ -295,12 +274,14 @@ jobs:
           additional-dependencies: ${{ matrix.apt_packages }}
           enable-tests: true
 
+      # TODO: Remove this 1 step before merging to openDAQ/openDAQ
       - name: Show ccache statistics
         run: ccache -sv
+      # TODO: End of sandbox-only steps
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Unit Test Results (${{ matrix.name }})
-          path: ${{ env.build_path }}/test_results
+          path: ${{ steps.build-and-test.outputs.gtest-xml-path }}
