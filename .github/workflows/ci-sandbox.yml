@@ -38,6 +38,7 @@ jobs:
     name: ${{ matrix.name }}
     # ${{ }} expression syntax because of leading '!'
     # if: ${{ ! github.event.pull_request.draft }}
+    if: false
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
@@ -193,51 +194,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Ubuntu Latest gcc-12 Release
-            cmake_generator: Ninja
-            cmake_build_type: Release
-            apt_packages: g++-12
-            cmake_defines: -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
           # - name: Ubuntu Latest gcc-12 Release
-          #   runner: ubuntu-latest
           #   cmake_generator: Ninja
           #   cmake_build_type: Release
-          #   cmake_defines: -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 -DDAQMODULES_PARQUET_RECORDER_MODULE=ON  -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
-          # - name: Ubuntu 22.04 gcc-12 Debug
-          #   image: ubuntu:22.04
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Debug
           #   apt_packages: g++-12
-          #   cc: gcc-12
-          #   cxx: g++-12
-          # - name: Ubuntu 22.04 gcc-9 Release
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Release
-          #   cmake_defines: -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF
-          #   apt_packages: g++-9
-          #   cc: gcc-9
-          #   cxx: g++-9
-          - name: Ubuntu Latest clang-14 Release
+          #   cmake_defines: -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
+          - name: Ubuntu Latest gcc-12 x86 Release
             cmake_generator: Ninja
             cmake_build_type: Release
-            apt_packages: clang-14
-            cmake_defines: -DCMAKE_C_COMPILER=clang-14 -DCMAKE_CXX_COMPILER=clang++-14 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
-    # container:
-    #   image: ubuntu:22.04
-    #   env:
-    #     TZ: Europe/Berlin
-    #     DEBIAN_FRONTEND: noninteractive
+            apt_packages: gcc-12-multilib g++-12-multilib
+            cmake_defines: -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
+            enable_32bit: true
+          # - name: Ubuntu Latest clang-14 Release
+          #   cmake_generator: Ninja
+          #   cmake_build_type: Release
+          #   apt_packages: clang-14
+          #   cmake_defines: -DCMAKE_C_COMPILER=clang-14 -DCMAKE_CXX_COMPILER=clang++-14 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
     steps:
-      # - name: Install basic dependencies
-      #   run: |
-      #     apt-get update
-      #     apt-get install -y git openssh-client
-
-      # - name: Disable git safe directory checks
-      #   run : git config --global --add safe.directory '*'
-
       # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
       - name: Checkout openDAQ
         if: github.repository != 'openDAQ/openDAQ'
@@ -261,6 +235,7 @@ jobs:
         with:
           cmake-config-args: ${{ matrix.cmake_defines }}
           cmake-build-type: ${{ matrix.cmake_build_type }}
+          target-arch: ${{ matrix.enable_32bit == true && 'x86-32' || '' }}
       # TODO: End of sandbox-only steps
 
       - name: Build and Test
@@ -272,6 +247,7 @@ jobs:
           cmake-config-args: ${{ matrix.cmake_defines }}
           cmake-build-type: ${{ matrix.cmake_build_type }}
           additional-dependencies: ${{ matrix.apt_packages }}
+          enable-32bit: ${{ matrix.enable_32bit || 'false' }}
           enable-tests: true
 
       # TODO: Remove this 1 step before merging to openDAQ/openDAQ

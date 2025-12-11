@@ -30,6 +30,10 @@ inputs:
     description: 'Python version(s) to install (space-separated for multiple versions)'
     required: false
     default: ''
+  enable-32bit:
+    description: 'Install 32-bit (i386) development libraries for cross-compilation'
+    required: false
+    default: 'false'
 
 outputs:
   gtest-xml-path:
@@ -67,12 +71,32 @@ runs:
     - name: Install Linux dependencies
       if: runner.os == 'Linux'
       shell: bash
+      env:
+        ENABLE_32BIT: ${{ inputs.enable-32bit }}
       run: |
+        DEV_PACKAGES=(
+          libx11-dev
+          libxi-dev
+          libxcursor-dev
+          libxrandr-dev
+          libgl-dev
+          libudev-dev
+          libfreetype6-dev
+        )
+
+        MONO_PACKAGES=""
+        if [ "$ENABLE_32BIT" == "true" ]; then
+          sudo dpkg --add-architecture i386
+          DEV_PACKAGES=("${DEV_PACKAGES[@]/%/:i386}")
+        else
+          MONO_PACKAGES="mono-runtime libmono-system-json-microsoft4.0-cil libmono-system-data4.0-cil"
+        fi
+
         sudo apt-get update && sudo apt-get install -y --no-install-recommends \
           ${{ inputs.additional-dependencies || '' }} \
           lld \
-          mono-runtime libmono-system-json-microsoft4.0-cil libmono-system-data4.0-cil \
-          libx11-dev libxi-dev libxcursor-dev libxrandr-dev libgl-dev libudev-dev libfreetype6-dev
+          $MONO_PACKAGES \
+          "${DEV_PACKAGES[@]}"
 
     - name: Install ninja-build
       if: inputs.cmake-generator == 'Ninja'
