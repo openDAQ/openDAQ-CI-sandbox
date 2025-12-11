@@ -178,6 +178,26 @@ runs:
         fi
         echo "::endgroup::"
 
+    - name: Verify 32-bit build
+      if: runner.os == 'Linux' && inputs.enable-32bit == 'true'
+      shell: bash
+      env:
+        CMAKE_BUILD_PATH: ${{ steps.cmake-config.outputs.build-path }}
+      run: |
+        echo "::group::Verify 32-bit binaries"
+        for f in "$CMAKE_BUILD_PATH"/bin/test_*; do
+          [ -f "$f" ] || continue
+          INFO=$(file -b "$f")
+          if echo "$INFO" | grep -q "ELF 32-bit"; then
+            echo "$(basename "$f"): OK"
+          else
+            echo "$(basename "$f"): WARNING"
+          fi
+          echo "$INFO"
+          echo "-----"
+        done
+        echo "::endgroup::"
+
     - name: Test
       id: test
       if: inputs.enable-tests == 'true'
