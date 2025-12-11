@@ -84,10 +84,11 @@ runs:
           libfreetype6-dev
         )
 
-        MONO_PACKAGES=""
         if [ "$ENABLE_32BIT" == "true" ]; then
           sudo dpkg --add-architecture i386
           DEV_PACKAGES=("${DEV_PACKAGES[@]/%/:i386}")
+          # mono-runtime needed for rtgen.exe (code generator)
+          MONO_PACKAGES="mono-runtime"
         else
           MONO_PACKAGES="mono-runtime libmono-system-json-microsoft4.0-cil libmono-system-data4.0-cil"
         fi
