@@ -337,12 +337,11 @@ jobs:
               -DCMAKE_SYSTEM_NAME=Linux
               -DCMAKE_SYSTEM_PROCESSOR=i686
               -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-              "-DCMAKE_C_FLAGS=-m32 -fPIC"
+              "-DCMAKE_C_FLAGS=-m32 -fPIC -DOPENDAQ_BCRYPT_BF_ASM_DISABLE"
               "-DCMAKE_CXX_FLAGS=-m32 -fPIC -Wno-error=stringop-overflow"
-              -DCMAKE_ASM_FLAGS=-m32
+              "-DCMAKE_ASM_FLAGS=-m32"
               -DCMAKE_C_COMPILER=gcc-12
               -DCMAKE_CXX_COMPILER=g++-12
-              -DCMAKE_ASM_COMPILER=gcc-12
               -DCMAKE_C_COMPILER_LAUNCHER=ccache
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
             enable-32bit: true

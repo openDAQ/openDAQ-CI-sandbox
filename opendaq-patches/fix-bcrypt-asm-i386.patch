@@ -1,13 +1,28 @@
-diff --git a/external/bcrypt/CMakeLists.txt b/external/bcrypt/CMakeLists.txt
-index e103f397..8ba9defe 100644
---- a/external/bcrypt/CMakeLists.txt
-+++ b/external/bcrypt/CMakeLists.txt
-@@ -19,7 +19,7 @@ set(SRC_CPPS ${SRC_DIR}/bcrypt.c
-              ${SRC_DIR}/crypt_blowfish.c
-              ${SRC_DIR}/crypt_gensalt.c
-              ${SRC_DIR}/wrapper.c
--             #${SRC_DIR}/x86.S
-+             ${SRC_DIR}/x86.S
- )
- 
- add_library(${EXTERNAL_LIB} ${SRC_CPPS} ${SRC_HEADERS})
+diff --git a/external/bcrypt/src/crypt_blowfish.c b/external/bcrypt/src/crypt_blowfish.c
+index e103f397..5a8b2c1d 100644
+--- a/external/bcrypt/src/crypt_blowfish.c
++++ b/external/bcrypt/src/crypt_blowfish.c
+@@ -57,7 +57,8 @@ static char *_crypt_gensalt_blowfish_rn(const char *prefix,
+ #include "crypt_blowfish.h"
+ #endif
+
+-#ifdef __i386__
++/* BF_ASM=1 requires x86.S which is not included in build */
++#if defined(__i386__) && !defined(OPENDAQ_BCRYPT_BF_ASM_DISABLE)
+ #define BF_ASM				1
+ #define BF_SCALE			1
+ #elif defined(__x86_64__) || defined(__alpha__) || defined(__hppa__)
+diff --git a/shared/libraries/opcua/opcuashared/src/bcrypt/crypt_blowfish.c b/shared/libraries/opcua/opcuashared/src/bcrypt/crypt_blowfish.c
+index 1234567..abcdefg 100644
+--- a/shared/libraries/opcua/opcuashared/src/bcrypt/crypt_blowfish.c
++++ b/shared/libraries/opcua/opcuashared/src/bcrypt/crypt_blowfish.c
+@@ -53,7 +53,8 @@ static char *_crypt_gensalt_blowfish_rn(const char *prefix,
+ /* Just to make sure the prototypes match the actual definitions */
+ #include <opcuashared/bcrypt/crypt_blowfish.h>
+
+-#ifdef __i386__
++/* BF_ASM=1 requires x86.S which is not included in build */
++#if defined(__i386__) && !defined(OPENDAQ_BCRYPT_BF_ASM_DISABLE)
+ #define BF_ASM				1
+ #define BF_SCALE			1
+ #elif defined(__x86_64__) || defined(__alpha__) || defined(__hppa__)
