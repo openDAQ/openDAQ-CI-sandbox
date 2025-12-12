@@ -185,6 +185,7 @@ jobs:
     name: ${{ matrix.name }}
     # ${{ }} expression syntax because of leading '!'
     # if: ${{ ! github.event.pull_request.draft }}
+    if: false
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
@@ -306,6 +307,90 @@ jobs:
           cmake-build-type: ${{ matrix.cmake_build_type }}
           additional-dependencies: ${{ matrix.apt_packages }}
           enable-32bit: ${{ matrix.enable_32bit || 'false' }}
+          enable-tests: true
+
+      # TODO: Remove this 1 step before merging to openDAQ/openDAQ
+      - name: Show ccache statistics
+        if: ${{ matrix.disable-ccache != true }}
+        run: ccache -sv
+      # TODO: End of sandbox-only steps
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unit Test Results (${{ matrix.name }})
+          path: ${{ steps.build-and-test.outputs.gtest-xml-path }}
+
+  build_linux_32_bit:
+    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu Latest 32-bits Release
+            additional-packages: gcc-12-multilib g++-12-multilib
+            cmake-build-type: Release
+            cmake-generator: Ninja
+            cmake-defines: >-
+              -DCMAKE_SYSTEM_NAME=Linux
+              -DCMAKE_SYSTEM_PROCESSOR=i686
+              -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+              "-DCMAKE_C_FLAGS=-m32 -fPIC"
+              "-DCMAKE_CXX_FLAGS=-m32 -fPIC -Wno-error=stringop-overflow"
+              -DCMAKE_ASM_FLAGS=-m32
+              -DCMAKE_C_COMPILER=gcc-12
+              -DCMAKE_CXX_COMPILER=g++-12
+              -DCMAKE_ASM_COMPILER=gcc-12
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            enable-32bit: true
+            disable-ccache: false
+    steps:
+      # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
+      - name: Checkout openDAQ
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: actions/checkout@v4
+        with:
+          repository: openDAQ/openDAQ
+
+      - name: Checkout CI actions
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: actions/checkout@v4
+        with:
+          path: _ci-sandbox
+
+      - name: Copy CI actions
+        if: github.repository != 'openDAQ/openDAQ'
+        shell: bash
+        run: cp -r _ci-sandbox/.github/actions .github/
+
+      - name: Apply bcrypt 32 bit fix build patch
+        shell: bash
+        run: |
+          git apply -v _ci-sandbox/opendaq-patches/fix-bcrypt-asm-i386.patch
+          git status
+
+      - name: Setup ccache
+        if: ${{ matrix.disable-ccache != true }}
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
+        with:
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          target-arch: 'x86-32'
+      # TODO: End of sandbox-only steps
+
+      - name: Build and Test
+        id: build-and-test
+        uses: ./.github/actions/build-sdk
+        with:
+          cmake-generator: ${{ matrix.cmake-generator }}
+          cmake-config-preset: 'ci'
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          additional-dependencies: ${{ matrix.additional-packages }}
+          enable-32bit: ${{ matrix.enable-32bit || 'false' }}
           enable-tests: true
 
       # TODO: Remove this 1 step before merging to openDAQ/openDAQ

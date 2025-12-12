@@ -1,0 +1,13 @@
+diff --git a/external/bcrypt/CMakeLists.txt b/external/bcrypt/CMakeLists.txt
+index e103f397..8ba9defe 100644
+--- a/external/bcrypt/CMakeLists.txt
++++ b/external/bcrypt/CMakeLists.txt
+@@ -19,7 +19,7 @@ set(SRC_CPPS ${SRC_DIR}/bcrypt.c
+              ${SRC_DIR}/crypt_blowfish.c
+              ${SRC_DIR}/crypt_gensalt.c
+              ${SRC_DIR}/wrapper.c
+-             #${SRC_DIR}/x86.S
++             ${SRC_DIR}/x86.S
+ )
+ 
+ add_library(${EXTERNAL_LIB} ${SRC_CPPS} ${SRC_HEADERS})
