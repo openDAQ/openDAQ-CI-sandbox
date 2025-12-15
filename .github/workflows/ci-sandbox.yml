@@ -63,6 +63,7 @@ jobs:
             cmake-build-type: Release
             cmake-defines: -A Win32
             cmake-generator: "Visual Studio 17 2022"
+            enable-32bit: true
           - name: Windows Clang Release
             runner: windows-latest
             cmake-build-type: Release
@@ -71,7 +72,7 @@ jobs:
           - name: Windows GCC Release
             runner: windows-latest
             cmake-build-type: Release
-            cmake-defines: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+            cmake-defines: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations
             cmake-generator: Ninja
 
     steps:
@@ -103,6 +104,7 @@ jobs:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-generator: ${{ matrix.cmake-generator }}
           enable-tests: true
+          enable-32bit: ${{ matrix.enable-32bit == true }}
 
       - name: Upload test results
         if: always()
