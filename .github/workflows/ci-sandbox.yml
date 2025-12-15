@@ -38,7 +38,6 @@ jobs:
     name: ${{ matrix.name }}
     # ${{ }} expression syntax because of leading '!'
     # if: ${{ ! github.event.pull_request.draft }}
-    if: false
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
@@ -50,46 +49,30 @@ jobs:
         # https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners
         include:
           - name: Windows VS 2022 x64 Release
-            runner: windows-2022
-            cmake_generator: "Visual Studio 17 2022"
-            cmake_generator_platform: x64
-            cmake_build_type: Release
-            cmake_defines: -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
-            cpack: NSIS
+            runner: windows-latest
+            cmake-build-type: Release
+            cmake-defines: -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
+            cmake-generator: "Visual Studio 17 2022"
           - name: Windows VS 2022 x64 Debug
-            runner: windows-2022
-            cmake_generator: "Visual Studio 17 2022"
-            cmake_generator_platform: x64
-            cmake_build_type: Debug
-            cmake_defines:
-            cpack: NSIS
+            runner: windows-latest
+            cmake-build-type: Debug
+            cmake-defines:
+            cmake-generator: "Visual Studio 17 2022"
           - name: Windows VS 2022 Win32 Release
-            runner: windows-2022
-            cmake_generator: "Visual Studio 17 2022"
-            cmake_build_type: Release
-            cmake_defines: -A Win32 -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
-            cpack: NSIS
+            runner: windows-latest
+            cmake-build-type: Release
+            cmake-defines: -A Win32
+            cmake-generator: "Visual Studio 17 2022"
           - name: Windows Clang Release
-            runner: windows-2022
-            cmake_generator: Ninja
-            cmake_build_type: Release
-            cmake_defines: -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
-            cpack: NSIS
-          #- name: Windows Intel-LLVM Release
-          #  runner: windows-2022
-          #  cmake_generator: "Ninja"
-          #  cmake_build_type: Release
-          #  cmake_defines: -DCMAKE_C_COMPILER=icx-cl -DCMAKE_CXX_COMPILER=icx-cl -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
-          #  cpack: NSIS
-
-    outputs:
-      # trick for reusable workflow in build_nuget because cannot use env context in "with:"
-      test_path: ${{ env.test_path }}
-      windows_x64_artifact_name: ${{ env.windows_x64_artifact }}
-      short_sha: ${{ env.short_sha }}
-
-    env:
-      short_sha: 'ci'  # for .NET Bindings build
+            runner: windows-latest
+            cmake-build-type: Release
+            cmake-defines: -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+            cmake-generator: Ninja
+          - name: Windows GCC Release
+            runner: windows-latest
+            cmake-build-type: Release
+            cmake-defines: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+            cmake-generator: Ninja
 
     steps:
       # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
@@ -111,67 +94,15 @@ jobs:
         run: cp -r _ci-sandbox/.github/actions .github/
       # TODO: End of sandbox-only steps
 
-      - name: Checkout
-        # TODO: Remove this condition before merging to openDAQ/openDAQ
-        if: github.repository == 'openDAQ/openDAQ'
-        uses: actions/checkout@v4
-
-      - name: Install Intel-LLVM compiler
-        shell: powershell
-        if: matrix.name == 'Windows Intel-LLVM Release'
-        run: |
-          Invoke-WebRequest -Uri "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/47a201d7-d4cd-4079-a2d8-0e66b860aaaa/intel-dpcpp-cpp-compiler-2025.2.0.536_offline.exe" -OutFile oneapi.exe
-          Start-Process oneapi.exe -ArgumentList '--silent', '--eula=accept' -Wait -NoNewWindow
-      
-      - name: Install NSIS
-        if: matrix.cpack == 'NSIS'
-        shell: pwsh
-        run: choco install nsis -y --no-progress
-
       - name: Build and Test
         id: build-and-test
-        if: matrix.name != 'Windows Intel-LLVM Release'
         uses: ./.github/actions/build-sdk
         with:
-          cmake-generator: ${{ matrix.cmake_generator }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
           cmake-config-preset: ${{ env.cmake_preset }}
-          cmake-config-args: ${{ matrix.cmake_defines }}
-          cmake-build-type: ${{ matrix.cmake_build_type }}
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-generator: ${{ matrix.cmake-generator }}
           enable-tests: true
-
-      - name: ConfigureIntel
-        shell: cmd
-        if: matrix.name == 'Windows Intel-LLVM Release'
-        env:
-          CMAKE_PRESET: ${{ env.cmake_preset }}
-          GITHUB_HEAD_REF: ${{ github.head_ref }}
-          CMAKE_GENERATOR: ${{ matrix.cmake_generator }}
-          CMAKE_DEFINES: ${{ matrix.cmake_defines }}
-        run: |
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          mkdir build
-          cd build
-          cmake -G "%CMAKE_GENERATOR%" --preset %CMAKE_PRESET% -DCI_GIT_BRANCH=%GITHUB_HEAD_REF% %CMAKE_DEFINES% ..
-
-      - name: BuildIntel
-        shell: cmd
-        if: matrix.name == 'Windows Intel-LLVM Release'
-        env:
-          CMAKE_BUILD_TYPE: ${{ matrix.cmake_build_type }}
-        working-directory: ./build
-        run: |
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          cmake --build . --config %CMAKE_BUILD_TYPE%
-
-      - name: TestIntel
-        shell: cmd
-        if: matrix.name == 'Windows Intel-LLVM Release'
-        env:
-          GTEST_OUTPUT: "xml:${{ env.test_path }}"
-          CTEST_PRESET: ${{ env.ctest_preset }}
-        run: |
-          call "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-          ctest --output-on-failure --preset %CTEST_PRESET% -C Release --test-dir build
 
       - name: Upload test results
         if: always()
@@ -185,6 +116,7 @@ jobs:
     name: ${{ matrix.name }}
     # ${{ }} expression syntax because of leading '!'
     # if: ${{ ! github.event.pull_request.draft }}
+    if: false
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
@@ -194,79 +126,46 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Ubuntu Latest gcc-14 Debug (ccache)
-            cmake_generator: Ninja
-            cmake_build_type: Debug
-            apt_packages: g++-14
-            cmake_defines: -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          
-          - name: Ubuntu Latest gcc-14 Debug (no ccache)
-            cmake_generator: Ninja
-            cmake_build_type: Debug
-            disable-ccache: true
-            apt_packages: g++-14
-            cmake_defines: -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14
-          
-          # - name: Ubuntu Latest gcc-9 Release
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Release
-          #   apt_packages: g++-9
-          #   cmake_defines: -DCMAKE_C_COMPILER=gcc-9 -DCMAKE_CXX_COMPILER=g++-9 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          # - name: Ubuntu Latest gcc-9 Debug
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Debug
-          #   apt_packages: g++-9
-          #   cmake_defines: -DCMAKE_C_COMPILER=gcc-9 -DCMAKE_CXX_COMPILER=g++-9 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          
-          # - name: Ubuntu Latest gcc-14 Release
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Release
-          #   apt_packages: g++-14
-          #   cmake_defines: -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          # - name: Ubuntu Latest gcc-14 Debug
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Debug
-          #   apt_packages: g++-14
-          #   cmake_defines: -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          
-          # - name: Ubuntu Latest clang-14 Release
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Release
-          #   apt_packages: clang-14
-          #   cmake_defines: -DCMAKE_C_COMPILER=clang-14 -DCMAKE_CXX_COMPILER=clang++-14 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          # - name: Ubuntu Latest clang-14 Debug
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Debug
-          #   apt_packages: clang-14
-          #   cmake_defines: -DCMAKE_C_COMPILER=clang-14 -DCMAKE_CXX_COMPILER=clang++-14 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
-          # - name: Ubuntu Latest clang-16 Release
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Release
-          #   apt_packages: clang-16
-          #   cmake_defines: -DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          # - name: Ubuntu Latest clang-16 Debug
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Debug
-          #   apt_packages: clang-16
-          #   cmake_defines: -DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
-          # - name: Ubuntu Latest gcc-12 Release
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Release
-          #   apt_packages: g++-12
-          #   cmake_defines: -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
-          # - name: Ubuntu Latest gcc-12 x86 Release
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Release
-          #   apt_packages: gcc-12-multilib g++-12-multilib
-          #   cmake_defines: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=i686 -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_C_COMPILER=gcc-12 -DCMAKE_CXX_COMPILER=g++-12 "-DCMAKE_C_FLAGS=-m32 -DBF_ASM=0" -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_ASM_FLAGS=-m32 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
-          #   enable_32bit: true
-          # - name: Ubuntu Latest clang-14 Release
-          #   cmake_generator: Ninja
-          #   cmake_build_type: Release
-          #   apt_packages: clang-14
-          #   cmake_defines: -DCMAKE_C_COMPILER=clang-14 -DCMAKE_CXX_COMPILER=clang++-14 -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          - name: Ubuntu Latest gcc-9 Release
+            additional-packages: g++-9
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: -DCMAKE_C_COMPILER=gcc-9 -DCMAKE_CXX_COMPILER=g++-9
+          - name: Ubuntu Latest gcc-14 Release
+            additional-packages: g++-14
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14
+          - name: Ubuntu Latest clang-14 Release
+            additional-packages: clang-14
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: -DCMAKE_C_COMPILER=clang-14 -DCMAKE_CXX_COMPILER=clang++-14
+          - name: Ubuntu Latest clang-16 Release
+            additional-packages: clang-16
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: -DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16
+          - name: Ubuntu Latest gcc-9 Debug
+            additional-packages: g++-9
+            cmake-generator: Ninja
+            cmake-build-type: Debug
+            cmake-defines: -DCMAKE_C_COMPILER=gcc-9 -DCMAKE_CXX_COMPILER=g++-9
+          - name: Ubuntu Latest gcc-14 Debug
+            additional-packages: g++-14
+            cmake-generator: Ninja
+            cmake-build-type: Debug
+            cmake-defines: -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14
+          - name: Ubuntu Latest clang-14 Debug
+            additional-packages: clang-14
+            cmake-generator: Ninja
+            cmake-build-type: Debug
+            cmake-defines: -DCMAKE_C_COMPILER=clang-14 -DCMAKE_CXX_COMPILER=clang++-14
+          - name: Ubuntu Latest clang-16 Debug
+            additional-packages: clang-16
+            cmake-generator: Ninja
+            cmake-build-type: Debug
+            cmake-defines: -DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16
 
     steps:
       # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
@@ -291,8 +190,8 @@ jobs:
         if: ${{ matrix.disable-ccache != true }}
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
         with:
-          cmake-config-args: ${{ matrix.cmake_defines }}
-          cmake-build-type: ${{ matrix.cmake_build_type }}
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
           target-arch: ${{ matrix.enable_32bit == true && 'x86-32' || '' }}
       # TODO: End of sandbox-only steps
 
@@ -300,12 +199,11 @@ jobs:
         id: build-and-test
         uses: ./.github/actions/build-sdk
         with:
-          cmake-generator: ${{ matrix.cmake_generator }}
+          additional-dependencies: ${{ matrix.additional-packages }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
           cmake-config-preset: ${{ env.cmake_preset }}
-          cmake-config-args: ${{ matrix.cmake_defines }}
-          cmake-build-type: ${{ matrix.cmake_build_type }}
-          additional-dependencies: ${{ matrix.apt_packages }}
-          enable-32bit: ${{ matrix.enable_32bit || 'false' }}
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-generator: ${{ matrix.cmake-generator }}
           enable-tests: true
 
       # TODO: Remove this 1 step before merging to openDAQ/openDAQ
