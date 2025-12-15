@@ -93,6 +93,14 @@ jobs:
         if: github.repository != 'openDAQ/openDAQ'
         shell: bash
         run: cp -r _ci-sandbox/.github/actions .github/
+
+      - name: Apply patches
+        if: github.repository != 'openDAQ/openDAQ'
+        shell: bash
+        run: |
+          for patch in _ci-sandbox/.github/patches/*.patch; do
+            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
+          done
       # TODO: End of sandbox-only steps
 
       - name: Build and Test

@@ -27,7 +27,7 @@ inputs:
     required: false
     default: 'false'
   enable-32bit:
-    description: 'Build for 32-bit architecture (x86)'
+    description: 'Build for 32-bit architecture'
     required: false
     default: 'false'
 outputs:
