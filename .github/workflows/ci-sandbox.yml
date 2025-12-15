@@ -72,7 +72,7 @@ jobs:
           - name: Windows GCC Release
             runner: windows-latest
             cmake-build-type: Release
-            cmake-defines: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations
+            cmake-defines: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual"
             cmake-generator: Ninja
 
     steps:

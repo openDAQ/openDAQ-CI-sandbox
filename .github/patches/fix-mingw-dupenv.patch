@@ -1,0 +1,13 @@
+diff --git a/core/opendaq/logger/include/opendaq/logger_sink_factory.h b/core/opendaq/logger/include/opendaq/logger_sink_factory.h
+index abcdef12..12345678 100644
+--- a/core/opendaq/logger/include/opendaq/logger_sink_factory.h
++++ b/core/opendaq/logger/include/opendaq/logger_sink_factory.h
+@@ -83,7 +83,7 @@ inline LoggerSinkPtr LastMessageLoggerSink()
+ inline std::string safeGetEnv(const char* name)
+ {
+     std::string result;
+-#ifdef _WIN32
++#if defined(_WIN32) && !defined(__MINGW32__)
+     char* env = nullptr;
+     size_t len = 0;
+     if (_dupenv_s(&env, &len, name) == 0 && env != nullptr)
