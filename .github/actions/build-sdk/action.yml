@@ -73,6 +73,12 @@ runs:
           lld mono-runtime libmono-system-json-microsoft4.0-cil libmono-system-data4.0-cil \
           libx11-dev libxi-dev libxcursor-dev libxrandr-dev libgl-dev libudev-dev libfreetype6-dev
 
+    - name: Install macOS dependencies
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        HOMEBREW_NO_AUTO_UPDATE=1 brew install mono ${{ inputs.additional-dependencies }}
+
     - name: Install ninja-build
       if: inputs.cmake-generator == 'Ninja'
       uses: seanmiddleditch/gha-setup-ninja@v5
