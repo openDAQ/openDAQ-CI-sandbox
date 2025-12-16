@@ -38,6 +38,7 @@ jobs:
     name: ${{ matrix.name }}
     # ${{ }} expression syntax because of leading '!'
     # if: ${{ ! github.event.pull_request.draft }}
+    if: false
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
@@ -253,3 +254,97 @@ jobs:
         with:
           name: Unit Test Results (${{ matrix.name }})
           path: ${{ steps.build-and-test.outputs.gtest-xml-path }}
+
+  build_macos:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    # ${{ }} expression syntax because of leading '!'
+    # if: ${{ ! github.event.pull_request.draft }}
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
+      cancel-in-progress: true
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: MacOS Latest Clang Release
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            disable-ccache: 
+            runner: macos-latest
+
+    steps:
+      # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
+      - name: Checkout openDAQ
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: actions/checkout@v4
+        with:
+          repository: openDAQ/openDAQ
+
+      - name: Checkout CI actions
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: actions/checkout@v4
+        with:
+          path: _ci-sandbox
+
+      - name: Copy CI actions
+        if: github.repository != 'openDAQ/openDAQ'
+        shell: bash
+        run: cp -r _ci-sandbox/.github/actions .github/
+
+      - name: Setup ccache
+        if: ${{ matrix.disable-ccache != true }}
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
+        with:
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+
+      - name: Print Clang info
+        run: |
+          which clang
+          clang --version
+      # TODO: End of sandbox-only steps
+
+      # - name: Build wheels x86_64
+      #   working-directory: ./build
+      #   run: |
+      #     last_version="3.8"
+      #     for version in ${{ env.python_versions }}; do
+      #         cmake -G ${{ matrix.cmake_generator }} --preset ${{ env.cmake_preset }} -DCI_GIT_BRANCH=${{ github.head_ref }} -DCMAKE_BUILD_TYPE=${{ matrix.cmake_build_type }} -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.cmake_osx_deployment_target }} -DOPENDAQ_PYTHON_VERSION=$version ${{ matrix.additional_cmake_options }} ${{ github.workspace }}
+      #         cmake --build .
+      #         python$version -m venv venv
+      #         . venv/bin/activate
+      #         pip install numpy pybind11-stubgen
+      #         python${{env.python_version_build}} ../bindings/python/package/build_pip.py -r -c
+      #         cp -f pip/packages/opendaq*.whl ../wheels
+      #         deactivate
+      #         rm -rf venv
+      #         last_version=$version
+      #     done
+      #     echo "last_version=$last_version" >> "$GITHUB_ENV"
+
+      - name: Build and Test
+        id: build-and-test
+        uses: ./.github/actions/build-sdk
+        with:
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          cmake-config-preset: ${{ env.cmake_preset }}
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-generator: ${{ matrix.cmake-generator }}
+          enable-tests: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unit Test Results (${{ matrix.name }})
+          path: ${{ steps.build-and-test.outputs.gtest-xml-path }}
+
+      # TODO: Remove this 1 step before merging to openDAQ/openDAQ
+      - name: Show ccache statistics
+        if: ${{ matrix.disable-ccache != true }}
+        run: ccache -sv
+      # TODO: End of sandbox-only steps
