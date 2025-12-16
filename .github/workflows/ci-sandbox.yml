@@ -33,23 +33,6 @@ env:
   nuget_artifact: Packages (openDAQ.Net NuGet)
 
 jobs:
-  check_windows:
-    runs-on: windows-latest
-
-    steps:
-      - name: Get GCC lib path
-        id: gcc-lib
-        shell: bash
-        run: |
-          gcc -print-file-name=libssp.a || echo "::error::GCC didn't find libssp.a"
-          
-          SSP_DIR=$(dirname "$(gcc -print-file-name=libssp.a)")
-          echo "SSP path=$SSP_DIR"
-
-          find /c -name "libssp.a" 2>/dev/null || echo "::error::find didn't find libssp.a"
-
-
-
   build_windows:
     runs-on: ${{ matrix.runner }}
     name: ${{ matrix.name }}
@@ -90,7 +73,7 @@ jobs:
           - name: Windows GCC Release
             runner: windows-latest
             cmake-build-type: Release
-            cmake-defines: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_FLAGS="-fno-stack-protector" "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -fno-stack-protector" -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+            cmake-defines: -DCMAKE_C_COMPILER=D:/a/_temp/msys64/mingw64/bin/gcc.exe -DCMAKE_CXX_COMPILER=D:/a/_temp/msys64/mingw64/bin/g++.exe -DCMAKE_C_FLAGS="-fno-stack-protector" "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -fno-stack-protector" -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
             cmake-generator: Ninja
 
     steps:
@@ -119,6 +102,20 @@ jobs:
           for patch in _ci-sandbox/.github/patches/*.patch; do
             [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
           done
+
+      - name: Setup MSys2
+        uses: msys2/setup-msys2@v2
+        if: matrix.name == 'Windows GCC Release'
+        with:
+          msystem: MINGW64
+          path-type: inherit
+          install: mingw-w64-x86_64-toolchain mingw-w64-x86_64-ninja
+
+      - name: Add MSYS2 to PATH
+        if: matrix.name == 'Windows GCC Release'
+        shell: bash
+        run: |
+          echo "D:/a/_temp/msys64/mingw64/bin" >> $GITHUB_PATH
       # TODO: End of sandbox-only steps
 
       - name: Build and Test
