@@ -33,11 +33,29 @@ env:
   nuget_artifact: Packages (openDAQ.Net NuGet)
 
 jobs:
+  check_windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Get GCC lib path
+        id: gcc-lib
+        shell: bash
+        run: |
+          gcc -print-file-name=libssp.a || echo "::error::GCC didn't find libssp.a"
+          
+          SSP_DIR=$(dirname "$(gcc -print-file-name=libssp.a)")
+          echo "SSP path=$SSP_DIR"
+
+          find /c -name "libssp.a" 2>/dev/null || echo "::error::find didn't find libssp.a"
+
+
+
   build_windows:
     runs-on: ${{ matrix.runner }}
     name: ${{ matrix.name }}
     # ${{ }} expression syntax because of leading '!'
     # if: ${{ ! github.event.pull_request.draft }}
+    if: false
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
