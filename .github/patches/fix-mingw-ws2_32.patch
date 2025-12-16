@@ -1,0 +1,48 @@
+diff --git a/examples/modules/simulator_device_module/src/CMakeLists.txt b/examples/modules/simulator_device_module/src/CMakeLists.txt
+index c351e89c..75877b9f 100644
+--- a/examples/modules/simulator_device_module/src/CMakeLists.txt
++++ b/examples/modules/simulator_device_module/src/CMakeLists.txt
+@@ -50,6 +50,10 @@ target_link_libraries(${LIB_NAME} PUBLIC daq::opendaq
+ target_link_libraries(${LIB_NAME} PRIVATE $<BUILD_INTERFACE:Boost::asio>
+ )
+ 
++if (WIN32)
++    target_link_libraries(${LIB_NAME} PRIVATE ws2_32)
++endif()
++
+ target_include_directories(${LIB_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
+                                               $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>
+                                               $<INSTALL_INTERFACE:include>
+diff --git a/modules/new_websocket_streaming_server_module/src/CMakeLists.txt b/modules/new_websocket_streaming_server_module/src/CMakeLists.txt
+index 5af7e9e8..9b6cc67d 100644
+--- a/modules/new_websocket_streaming_server_module/src/CMakeLists.txt
++++ b/modules/new_websocket_streaming_server_module/src/CMakeLists.txt
+@@ -28,6 +28,14 @@ if (TARGET Boost::endian)
+     target_link_libraries(${LIB_NAME} PRIVATE Boost::endian)
+ endif ()
+ 
++if (WIN32)
++    target_link_libraries(${LIB_NAME}
++        PUBLIC
++            ws2_32
++            wsock32
++    )
++endif()
++
+ if(MSVC)
+     target_compile_options(${LIB_NAME} PRIVATE /bigobj)
+ endif()
+diff --git a/tests/integration/test_opendaq_device_modules/CMakeLists.txt b/tests/integration/test_opendaq_device_modules/CMakeLists.txt
+index ab5d2d7d..56b2f128 100644
+--- a/tests/integration/test_opendaq_device_modules/CMakeLists.txt
++++ b/tests/integration/test_opendaq_device_modules/CMakeLists.txt
+@@ -26,6 +26,9 @@ target_link_libraries(${TEST_APP} PRIVATE daq::test_utils
+ # Should link only what you need $<BUILD_INTERFACE:Boost::asio>
+ target_link_libraries(${TEST_APP} PRIVATE $<BUILD_INTERFACE:Boost::asio>)
+ 
++if (WIN32)
++    target_link_libraries(${TEST_APP} PRIVATE ws2_32)
++endif()
+ 
+ add_dependencies(${TEST_APP} daq::opcua_client_module
+                              daq::opcua_server_module
