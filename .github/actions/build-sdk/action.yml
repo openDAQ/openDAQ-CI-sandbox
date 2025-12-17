@@ -177,5 +177,5 @@ runs:
         fi
 
         echo "::group::CTest"
-        ctest --test-dir "$CMAKE_BUILD_PATH" --preset run_tests --output-on-failure $CTEST_ARGS
+        ctest --test-dir "$CMAKE_BUILD_PATH" --preset run_tests --output-on-failure $CTEST_ARGS --verbose
         echo "::endgroup::"
