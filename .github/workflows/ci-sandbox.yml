@@ -48,31 +48,38 @@ jobs:
       matrix:
         # https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners
         include:
-          - name: Windows VS 2022 x64 Release
-            runner: windows-latest
-            cmake-build-type: Release
-            cmake-defines: -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
-            cmake-generator: "Visual Studio 17 2022"
-          - name: Windows VS 2022 x64 Debug
-            runner: windows-latest
-            cmake-build-type: Debug
-            cmake-defines:
-            cmake-generator: "Visual Studio 17 2022"
-          - name: Windows VS 2022 Win32 Release
-            runner: windows-latest
-            cmake-build-type: Release
-            cmake-defines: -A Win32
-            cmake-generator: "Visual Studio 17 2022"
-            enable-32bit: true
-          - name: Windows Clang Release
-            runner: windows-latest
-            cmake-build-type: Release
-            cmake-defines: -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-            cmake-generator: Ninja
+          # - name: Windows VS 2022 x64 Release
+          #   runner: windows-latest
+          #   cmake-build-type: Release
+          #   cmake-defines: -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
+          #   cmake-generator: "Visual Studio 17 2022"
+          # - name: Windows VS 2022 x64 Debug
+          #   runner: windows-latest
+          #   cmake-build-type: Debug
+          #   cmake-defines:
+          #   cmake-generator: "Visual Studio 17 2022"
+          # - name: Windows VS 2022 Win32 Release
+          #   runner: windows-latest
+          #   cmake-build-type: Release
+          #   cmake-defines: -A Win32
+          #   cmake-generator: "Visual Studio 17 2022"
+          #   enable-32bit: true
+          # - name: Windows Clang Release
+          #   runner: windows-latest
+          #   cmake-build-type: Release
+          #   cmake-defines: -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          #   cmake-generator: Ninja
           - name: Windows GCC Release
             runner: windows-latest
             cmake-build-type: Release
-            cmake-defines: -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ "-DCMAKE_EXE_LINKER_FLAGS=-LC:/Strawberry/c/lib" "-DCMAKE_SHARED_LINKER_FLAGS=-LC:/Strawberry/c/lib" "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual" -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+            cmake-defines: >-
+              -DCMAKE_C_COMPILER=gcc
+              -DCMAKE_CXX_COMPILER=g++
+              "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -Wa,-mbig-obj"
+              "-DCMAKE_C_FLAGS=-Wa,-mbig-obj"
+              "-DCMAKE_EXE_LINKER_FLAGS=-LC:/Strawberry/c/lib"
+              "-DCMAKE_SHARED_LINKER_FLAGS=-LC:/Strawberry/c/lib"
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
             cmake-generator: Ninja
 
     steps:
