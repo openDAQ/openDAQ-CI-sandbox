@@ -272,9 +272,24 @@ jobs:
           - name: MacOS Latest Clang Release
             cmake-generator: Ninja
             cmake-build-type: Release
-            cmake-defines: -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            cmake-defines: >-
+              -DCMAKE_C_COMPILER=clang 
+              -DCMAKE_CXX_COMPILER=clang++ 
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
             disable-ccache: 
             runner: macos-latest
+
+          - name: MacOS 15 Intel Clang Release
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DCMAKE_C_COMPILER=clang 
+              -DCMAKE_CXX_COMPILER=clang++ 
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+            disable-ccache: 
+            runner: macos-15-intel
 
     steps:
       # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
@@ -296,6 +311,7 @@ jobs:
         run: cp -r _ci-sandbox/.github/actions .github/
 
       - name: Setup ccache
+        id: ccache-setup
         if: ${{ matrix.disable-ccache != true }}
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
         with:
@@ -304,8 +320,11 @@ jobs:
 
       - name: Print Clang info
         run: |
-          which clang
+          echo "------"
+          echo "Clang: $(which clang)"
           clang --version
+          echo "------"
+
       # TODO: End of sandbox-only steps
 
       # - name: Build wheels x86_64
@@ -335,6 +354,14 @@ jobs:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-generator: ${{ matrix.cmake-generator }}
           enable-tests: true
+
+      # Save ccache on build failure to preserve compilation progress
+      - name: Save ccache on failure
+        if: failure() && matrix.disable-ccache != true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ${{ steps.ccache-setup.outputs.cache-key }}
 
       - name: Upload test results
         if: always()
