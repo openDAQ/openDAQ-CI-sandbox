@@ -18,11 +18,15 @@ inputs:
     description: 'Prefix for cache key (e.g., opendaq, test). If not set, no prefix is used.'
     required: false
     default: ''
+  download-only:
+    description: 'If true, only download cache (no auto-save). Use when manually saving cache later with actions/cache/save.'
+    required: false
+    default: 'false'
 
 outputs:
   cache-hit:
     description: 'Whether cache was restored'
-    value: ${{ steps.cache.outputs.cache-hit }}
+    value: ${{ steps.cache.outputs.cache-hit || steps.cache-download.outputs.cache-hit }}
   cache-key:
     description: 'The cache key used'
     value: ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-${{ steps.ccache-key.outputs.short-sha }}
@@ -129,9 +133,20 @@ runs:
           echo "prefix=" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: Restore ccache
+    - name: Restore ccache (with auto-save)
+      if: inputs.download-only != 'true'
       id: cache
       uses: actions/cache@v4
+      with:
+        path: ${{ steps.ccache-key.outputs.dir }}
+        key: ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-${{ steps.ccache-key.outputs.short-sha }}
+        restore-keys: |
+          ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-
+
+    - name: Restore ccache (download only)
+      if: inputs.download-only == 'true'
+      id: cache-download
+      uses: actions/cache/restore@v4
       with:
         path: ${{ steps.ccache-key.outputs.dir }}
         key: ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-${{ steps.ccache-key.outputs.short-sha }}
