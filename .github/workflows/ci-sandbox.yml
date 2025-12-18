@@ -163,6 +163,18 @@ jobs:
           echo "GCC search path:"
           gcc -print-file-name=libssp.a
 
+      - name: Find libssp path
+        if: ${{ matrix.use-msys-setup != true && runner.os == 'Windows' }}
+        id: find-libssp
+        shell: bash
+        run: |
+          LIBSSP_PATH=$(gcc -print-file-name=libssp.a)
+          LIBSSP_DIR=$(dirname "$LIBSSP_PATH")
+          echo "libssp found at: $LIBSSP_PATH"
+          echo "libssp-dir=$LIBSSP_DIR" >> "$GITHUB_OUTPUT"
+          echo "cmake-exe-linker-flags=\"-DCMAKE_EXE_LINKER_FLAGS=-L$LIBSSP_DIR\"" >> "$GITHUB_OUTPUT"
+          echo "cmake-shared-linker-flags=\"-DCMAKE_SHARED_LINKER_FLAGS=-L$LIBSSP_DIR\"" >> "$GITHUB_OUTPUT"
+
       - name: Setup ccache
         id: ccache-setup
         if: ${{ matrix.disable-ccache != true }}
@@ -171,6 +183,7 @@ jobs:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
           target-arch: ${{ matrix.enable-32bit == true && 'x86-32' || '' }}
+          download-only: 'true'
       # TODO: End of sandbox-only steps
 
       - name: Build and Test
@@ -179,7 +192,10 @@ jobs:
         with:
           cmake-build-type: ${{ matrix.cmake-build-type }}
           cmake-config-preset: ${{ env.cmake_preset }}
-          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-config-args: >-
+            ${{ matrix.cmake-defines }}
+            ${{ steps.find-libssp.outputs.cmake-exe-linker-flags || '' }}
+            ${{ steps.find-libssp.outputs.cmake-shared-linker-flags || '' }}
           cmake-generator: ${{ matrix.cmake-generator }}
           enable-tests: true
           enable-32bit: ${{ matrix.enable-32bit == true }}
