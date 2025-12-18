@@ -85,6 +85,21 @@ jobs:
             cmake-generator: Ninja
             disable-ccache: false
             enable-32bit: false
+          - name: Windows GCC Release (MSYS2)
+            runner: windows-latest
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DCMAKE_C_COMPILER=gcc
+              -DCMAKE_CXX_COMPILER=g++
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+              "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -Wa,-mbig-obj -Wno-error=conversion-null"
+              "-DCMAKE_C_FLAGS=-Wa,-mbig-obj"
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+            cmake-generator: Ninja
+            disable-ccache: false
+            enable-32bit: false
+            use-msys-setup: true
 
     steps:
       # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
@@ -113,7 +128,17 @@ jobs:
             [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
           done
 
+      - name: Setup MSYS2
+        if: ${{ matrix.use-msys-setup == true }}
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-ninja mingw-w64-x86_64-ccache
+          path-type: inherit
+
       - name: Setup ccache
+        id: ccache-setup
         if: ${{ matrix.disable-ccache != true }}
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
         with:
@@ -132,6 +157,8 @@ jobs:
           cmake-generator: ${{ matrix.cmake-generator }}
           enable-tests: true
           enable-32bit: ${{ matrix.enable-32bit == true }}
+          ccache-key: ${{ steps.ccache-setup.outputs.cache-key }}
+          ccache-dir: ${{ steps.ccache-setup.outputs.cache-dir }}
 
       # TODO: Remove this 1 step before merging to openDAQ/openDAQ
       - name: Show ccache statistics

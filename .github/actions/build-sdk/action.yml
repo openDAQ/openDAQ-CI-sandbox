@@ -30,6 +30,14 @@ inputs:
     description: 'Build for 32-bit architecture'
     required: false
     default: 'false'
+  ccache-key:
+    description: 'Cache key for saving ccache (from ccache-setup output)'
+    required: false
+    default: ''
+  ccache-dir:
+    description: 'Path to ccache directory (from ccache-setup output)'
+    required: false
+    default: ''
 outputs:
   gtest-xml-path:
     description: 'Path to GTest XML reports directory'
@@ -138,6 +146,13 @@ runs:
         cmake --build "$CMAKE_BUILD_PATH" $CMAKE_BUILD_ARGS
         echo "::endgroup::"
 
+    - name: Save ccache
+      if: inputs.ccache-key != '' && inputs.ccache-dir != ''
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ inputs.ccache-dir }}
+        key: ${{ inputs.ccache-key }}
+
     - name: Grant Linux capabilities to test executables
       if: runner.os == 'Linux' && inputs.enable-tests == 'true'
       shell: bash
@@ -151,6 +166,20 @@ runs:
           sudo setcap cap_net_raw=ep "$test"
           echo "$test - Granted"
         fi
+        echo "::endgroup::"
+
+    - name: Diagnose test executable
+      if: inputs.enable-tests == 'true' && runner.os == 'Windows'
+      shell: bash
+      env:
+        CMAKE_BUILD_PATH: ${{ steps.cmake-config.outputs.build-path }}
+      run: |
+        echo "::group::DLL dependencies (test_coretypes)"
+        ldd "$CMAKE_BUILD_PATH/bin/test_coretypes.exe" 2>/dev/null || echo "ldd not available"
+        echo "::endgroup::"
+
+        echo "::group::List tests (with 30s timeout)"
+        timeout 30 "$CMAKE_BUILD_PATH/bin/test_coretypes.exe" --gtest_list_tests || echo "Timeout or error (exit code: $?)"
         echo "::endgroup::"
 
     - name: Test
