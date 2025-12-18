@@ -28,6 +28,7 @@ Cross-platform ccache setup action with automatic caching.
 |--------|-------------|
 | `cache-hit` | `true` if cache was restored |
 | `cache-key` | Generated cache key |
+| `cache-dir` | Path to ccache directory |
 
 ## Cache key format
 

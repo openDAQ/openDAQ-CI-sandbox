@@ -26,6 +26,9 @@ outputs:
   cache-key:
     description: 'The cache key used'
     value: ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-${{ steps.ccache-key.outputs.short-sha }}
+  cache-dir:
+    description: 'Path to ccache directory'
+    value: ${{ steps.ccache-key.outputs.dir }}
 
 runs:
   using: composite
@@ -56,6 +59,10 @@ runs:
         CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
       run: |
         CCACHE_DIR="${{ github.workspace }}/.ccache"
+        # Convert to Windows path if on Windows (native ccache doesn't understand Unix paths)
+        if command -v cygpath &> /dev/null; then
+          CCACHE_DIR=$(cygpath -w "$CCACHE_DIR")
+        fi
         echo "dir=$CCACHE_DIR" >> "$GITHUB_OUTPUT"
         echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
 
@@ -130,9 +137,6 @@ runs:
         key: ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-${{ steps.ccache-key.outputs.short-sha }}
         restore-keys: |
           ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-
-          ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-
-          ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-
-          ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.compiler }}-
 
     - name: Configure ccache
       shell: bash
