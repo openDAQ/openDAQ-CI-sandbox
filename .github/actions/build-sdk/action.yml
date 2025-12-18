@@ -38,6 +38,10 @@ inputs:
     description: 'Path to ccache directory (from ccache-setup output)'
     required: false
     default: ''
+  ctest-exclude:
+    description: 'Regex pattern for tests to exclude (passed to ctest -E)'
+    required: false
+    default: ''
 outputs:
   gtest-xml-path:
     description: 'Path to GTest XML reports directory'
@@ -204,7 +208,10 @@ runs:
         if [ -n "$CMAKE_BUILD_TYPE" ]; then
           CTEST_ARGS="--build-config $CMAKE_BUILD_TYPE"
         fi
+        if [ -n "${{ inputs.ctest-exclude }}" ]; then
+          CTEST_ARGS="$CTEST_ARGS -E '${{ inputs.ctest-exclude }}'"
+        fi
 
         echo "::group::CTest"
-        ctest --test-dir "$CMAKE_BUILD_PATH" --preset run_tests --output-on-failure $CTEST_ARGS --verbose
+        eval ctest --test-dir "$CMAKE_BUILD_PATH" --preset run_tests --output-on-failure $CTEST_ARGS --verbose
         echo "::endgroup::"

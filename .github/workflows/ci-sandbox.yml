@@ -100,6 +100,23 @@ jobs:
             disable-ccache: false
             enable-32bit: false
             use-msys-setup: true
+          - name: Windows GCC Release (skip hanging)
+            runner: windows-latest
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DCMAKE_C_COMPILER=gcc
+              -DCMAKE_CXX_COMPILER=g++
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+              "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -Wa,-mbig-obj -Wno-error=conversion-null"
+              "-DCMAKE_C_FLAGS=-Wa,-mbig-obj"
+              "-DCMAKE_EXE_LINKER_FLAGS=-LC:/Strawberry/c/lib"
+              "-DCMAKE_SHARED_LINKER_FLAGS=-LC:/Strawberry/c/lib"
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+            cmake-generator: Ninja
+            disable-ccache: false
+            enable-32bit: false
+            ctest-exclude: test_coretypes
 
     steps:
       # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
@@ -134,8 +151,17 @@ jobs:
         with:
           msystem: MINGW64
           update: false
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-ninja mingw-w64-x86_64-ccache
+          install: mingw-w64-x86_64-crt-git mingw-w64-x86_64-gcc mingw-w64-x86_64-ninja mingw-w64-x86_64-ccache
           path-type: inherit
+
+      - name: Verify libssp.a
+        if: ${{ matrix.use-msys-setup == true }}
+        shell: msys2 {0}
+        run: |
+          echo "libssp files:"
+          ls -la /mingw64/lib/libssp* 2>/dev/null || echo "No libssp files found"
+          echo "GCC search path:"
+          gcc -print-file-name=libssp.a
 
       - name: Setup ccache
         id: ccache-setup
@@ -159,6 +185,7 @@ jobs:
           enable-32bit: ${{ matrix.enable-32bit == true }}
           ccache-key: ${{ steps.ccache-setup.outputs.cache-key }}
           ccache-dir: ${{ steps.ccache-setup.outputs.cache-dir }}
+          ctest-exclude: ${{ matrix.ctest-exclude }}
 
       # TODO: Remove this 1 step before merging to openDAQ/openDAQ
       - name: Show ccache statistics
