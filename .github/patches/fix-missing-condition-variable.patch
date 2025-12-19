@@ -3,7 +3,7 @@ diff --git a/examples/modules/basic_csv_recorder_module/include/basic_csv_record
 +++ b/examples/modules/basic_csv_recorder_module/include/basic_csv_recorder_module/multi_csv_writer.h
 @@ -17,6 +17,7 @@
  #pragma once
-
+ 
  #include <fstream>
 +#include <condition_variable>
  #include <queue>
