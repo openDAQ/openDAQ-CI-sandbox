@@ -73,8 +73,8 @@ jobs:
             runner: windows-latest
             cmake-build-type: Release
             cmake-defines: >-
-              -DCMAKE_C_COMPILER=gcc
-              -DCMAKE_CXX_COMPILER=g++
+              -DCMAKE_C_COMPILER=D:/a/_temp/msys64/mingw64/bin/gcc.exe
+              -DCMAKE_CXX_COMPILER=D:/a/_temp/msys64/mingw64/bin/g++.exe
               -DCMAKE_C_COMPILER_LAUNCHER=ccache
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
               "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -Wa,-mbig-obj -Wno-error=conversion-null"
@@ -83,29 +83,29 @@ jobs:
               "-DCMAKE_SHARED_LINKER_FLAGS=-LC:/Strawberry/c/lib"
               -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
             cmake-generator: Ninja
-            disable-ccache: false
+            disable-ccache: true
             enable-32bit: false
           - name: Windows GCC Release (MSYS2)
             runner: windows-latest
             cmake-build-type: Release
             cmake-defines: >-
-              -DCMAKE_C_COMPILER=gcc
-              -DCMAKE_CXX_COMPILER=g++
+              -DCMAKE_C_COMPILER=D:/a/_temp/msys64/mingw64/bin/gcc.exe
+              -DCMAKE_CXX_COMPILER=D:/a/_temp/msys64/mingw64/bin/g++.exe
               -DCMAKE_C_COMPILER_LAUNCHER=ccache
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
               "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -Wa,-mbig-obj -Wno-error=conversion-null"
               "-DCMAKE_C_FLAGS=-Wa,-mbig-obj"
               -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
             cmake-generator: Ninja
-            disable-ccache: false
+            disable-ccache: true
             enable-32bit: false
             use-msys-setup: true
           - name: Windows GCC Release (skip hanging)
             runner: windows-latest
             cmake-build-type: Release
             cmake-defines: >-
-              -DCMAKE_C_COMPILER=gcc
-              -DCMAKE_CXX_COMPILER=g++
+              -DCMAKE_C_COMPILER=D:/a/_temp/msys64/mingw64/bin/gcc.exe
+              -DCMAKE_CXX_COMPILER=D:/a/_temp/msys64/mingw64/bin/g++.exe
               -DCMAKE_C_COMPILER_LAUNCHER=ccache
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
               "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -Wa,-mbig-obj -Wno-error=conversion-null"
@@ -114,7 +114,7 @@ jobs:
               "-DCMAKE_SHARED_LINKER_FLAGS=-LC:/Strawberry/c/lib"
               -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
             cmake-generator: Ninja
-            disable-ccache: false
+            disable-ccache: true
             enable-32bit: false
             ctest-exclude: test_bcrypt
 
