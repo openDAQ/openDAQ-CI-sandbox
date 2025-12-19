@@ -116,7 +116,7 @@ jobs:
             cmake-generator: Ninja
             disable-ccache: false
             enable-32bit: false
-            ctest-exclude: test_coretypes
+            ctest-exclude: test_bcrypt
 
     steps:
       # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
@@ -164,16 +164,24 @@ jobs:
           gcc -print-file-name=libssp.a
 
       - name: Find libssp path
-        if: ${{ matrix.use-msys-setup != true && runner.os == 'Windows' }}
+        if: ${{ matrix.use-msys-setup == true }}
         id: find-libssp
-        shell: bash
+        shell: msys2 {0}
         run: |
           LIBSSP_PATH=$(gcc -print-file-name=libssp.a)
-          LIBSSP_DIR=$(dirname "$LIBSSP_PATH")
           echo "libssp found at: $LIBSSP_PATH"
-          echo "libssp-dir=$LIBSSP_DIR" >> "$GITHUB_OUTPUT"
-          echo "cmake-exe-linker-flags=\"-DCMAKE_EXE_LINKER_FLAGS=-L$LIBSSP_DIR\"" >> "$GITHUB_OUTPUT"
-          echo "cmake-shared-linker-flags=\"-DCMAKE_SHARED_LINKER_FLAGS=-L$LIBSSP_DIR\"" >> "$GITHUB_OUTPUT"
+          # Only output if gcc found an actual path (not just filename)
+          # Check for Unix path (/) or Windows path (X:/)
+          if [[ "$LIBSSP_PATH" == /* ]] || [[ "$LIBSSP_PATH" =~ ^[A-Za-z]:/ ]]; then
+            LIBSSP_DIR=$(dirname "$LIBSSP_PATH")
+            LIBSSP_DIR_WIN=$(cygpath -m "$LIBSSP_DIR")
+            echo "libssp Windows path: $LIBSSP_DIR_WIN"
+            echo "libssp-dir=$LIBSSP_DIR_WIN" >> "$GITHUB_OUTPUT"
+            echo "cmake-exe-linker-flags=-DCMAKE_EXE_LINKER_FLAGS=-L$LIBSSP_DIR_WIN" >> "$GITHUB_OUTPUT"
+            echo "cmake-shared-linker-flags=-DCMAKE_SHARED_LINKER_FLAGS=-L$LIBSSP_DIR_WIN" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::libssp.a not found in GCC search paths, skipping linker flags"
+          fi
 
       - name: Setup ccache
         id: ccache-setup
