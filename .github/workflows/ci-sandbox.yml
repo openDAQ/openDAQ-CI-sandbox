@@ -167,12 +167,12 @@ jobs:
             cmake-generator: Ninja
             disable-ccache: true
             enable-32bit: false
-          - name: Windows GCC Release (MSYS2)
+          - name: Windows GCC Release (MSYS2 MINGW64)
             runner: windows-latest
             cmake-build-type: Release
             cmake-defines: >-
-              -DCMAKE_C_COMPILER=D:/a/_temp/msys64/mingw64/bin/gcc.exe
-              -DCMAKE_CXX_COMPILER=D:/a/_temp/msys64/mingw64/bin/g++.exe
+              -DCMAKE_C_COMPILER=gcc
+              -DCMAKE_CXX_COMPILER=g++
               -DCMAKE_C_COMPILER_LAUNCHER=ccache
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
               "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -Wa,-mbig-obj -Wno-error=conversion-null"
@@ -182,6 +182,27 @@ jobs:
             disable-ccache: true
             enable-32bit: false
             use-msys-setup: true
+            msys-msystem: MINGW64
+            msys-install: mingw-w64-x86_64-crt-git mingw-w64-x86_64-gcc mingw-w64-x86_64-ninja mingw-w64-x86_64-ccache
+            msys-path: D:/a/_temp/msys64/mingw64/bin
+          - name: Windows GCC Release (MSYS2 UCRT64)
+            runner: windows-latest
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DCMAKE_C_COMPILER=gcc
+              -DCMAKE_CXX_COMPILER=g++
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+              "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -Wa,-mbig-obj -Wno-error=conversion-null"
+              "-DCMAKE_C_FLAGS=-Wa,-mbig-obj"
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+            cmake-generator: Ninja
+            disable-ccache: true
+            enable-32bit: false
+            use-msys-setup: true
+            msys-msystem: UCRT64
+            msys-install: mingw-w64-ucrt-x86_64-crt-git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-ccache
+            msys-path: D:/a/_temp/msys64/ucrt64/bin
           - name: Windows GCC Release (skip hanging)
             runner: windows-latest
             cmake-build-type: Release
@@ -197,6 +218,21 @@ jobs:
             disable-ccache: true
             enable-32bit: false
             ctest-exclude: test_bcrypt
+          - name: Windows GCC Release (niXman MSVCRT)
+            runner: windows-latest
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DCMAKE_C_COMPILER=gcc
+              -DCMAKE_CXX_COMPILER=g++
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+              "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -Wa,-mbig-obj -Wno-error=conversion-null"
+              "-DCMAKE_C_FLAGS=-Wa,-mbig-obj"
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+            cmake-generator: Ninja
+            disable-ccache: true
+            enable-32bit: false
+            use-nixman-msvcrt: true
 
     steps:
       # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
@@ -225,8 +261,26 @@ jobs:
             [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
           done
 
+      - name: Install niXman MinGW MSVCRT
+        if: ${{ matrix.use-nixman-msvcrt == true }}
+        shell: bash
+        run: |
+          echo "Downloading niXman MinGW 15.2.0 with MSVCRT..."
+          curl -L -o mingw-msvcrt.7z "https://github.com/niXman/mingw-builds-binaries/releases/download/15.2.0-rt_v13-rev0/x86_64-15.2.0-release-posix-seh-msvcrt-rt_v13-rev0.7z"
+          echo "Extracting to D:/mingw-msvcrt..."
+          7z x mingw-msvcrt.7z -oD:/ -y
+          mv D:/mingw64 D:/mingw-msvcrt
+          echo "D:/mingw-msvcrt/bin" >> $GITHUB_PATH
+          echo "Installed GCC version:"
+          D:/mingw-msvcrt/bin/gcc.exe --version
+          # Create libssp stubs (niXman builds also use --disable-libssp)
+          GCC_LIB_PATH=$(dirname "$(D:/mingw-msvcrt/bin/gcc.exe -print-libgcc-file-name)")
+          echo "Creating libssp stubs in $GCC_LIB_PATH"
+          ar rcs "$GCC_LIB_PATH/libssp.a"
+          ar rcs "$GCC_LIB_PATH/libssp_nonshared.a"
+
       - name: Create libssp stubs
-        if: ${{ matrix.use-msys-setup != true }}
+        if: ${{ matrix.use-msys-setup != true && matrix.use-nixman-msvcrt != true }}
         shell: bash
         run: |
           # Find GCC library path (directory containing libgcc)
@@ -243,17 +297,24 @@ jobs:
         if: ${{ matrix.use-msys-setup == true }}
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: ${{ matrix.msys-msystem }}
           update: false
-          install: mingw-w64-x86_64-crt-git mingw-w64-x86_64-gcc mingw-w64-x86_64-ninja mingw-w64-x86_64-ccache
+          install: ${{ matrix.msys-install }}
           path-type: inherit
+
+      - name: Add MSYS2 to PATH
+        if: ${{ matrix.msys-path != '' }}
+        shell: bash
+        run: |
+          echo "${{ matrix.msys-path }}" >> $GITHUB_PATH
+          echo "Added ${{ matrix.msys-path }} to PATH"
 
       - name: Verify libssp.a
         if: ${{ matrix.use-msys-setup == true }}
         shell: msys2 {0}
         run: |
           echo "libssp files:"
-          ls -la /mingw64/lib/libssp* 2>/dev/null || echo "No libssp files found"
+          ls -la /${{ matrix.msys-msystem == 'UCRT64' && 'ucrt64' || 'mingw64' }}/lib/libssp* 2>/dev/null || echo "No libssp files found"
           echo "GCC search path:"
           gcc -print-file-name=libssp.a
 
