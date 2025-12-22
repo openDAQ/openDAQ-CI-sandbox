@@ -33,6 +33,90 @@ env:
   nuget_artifact: Packages (openDAQ.Net NuGet)
 
 jobs:
+  gcc_info:
+    runs-on: windows-latest
+    name: GCC Info (Windows)
+    steps:
+      - name: GCC location and version
+        shell: bash
+        run: |
+          echo "=== WHERE GCC ==="
+          where gcc || echo "gcc not found in PATH"
+          echo ""
+          echo "=== GCC VERSION ==="
+          gcc --version
+          echo ""
+          echo "=== GCC VERBOSE ==="
+          gcc -v 2>&1
+          echo ""
+          echo "=== GCC DUMPMACHINE ==="
+          gcc -dumpmachine
+          echo ""
+          echo "=== GCC PRINT-SEARCH-DIRS ==="
+          gcc -print-search-dirs
+          echo ""
+          echo "=== GCC PRINT-LIBGCC-FILE-NAME ==="
+          gcc -print-libgcc-file-name
+
+      - name: MinGW directory structure
+        shell: bash
+        run: |
+          echo "=== C:/mingw64 contents ==="
+          ls -la /c/mingw64/ 2>/dev/null || echo "C:/mingw64 not found"
+          echo ""
+          echo "=== C:/mingw64/bin (first 20) ==="
+          ls /c/mingw64/bin/ 2>/dev/null | head -20 || echo "not found"
+          echo ""
+          echo "=== C:/mingw64/lib (first 20) ==="
+          ls /c/mingw64/lib/ 2>/dev/null | head -20 || echo "not found"
+          echo ""
+          echo "=== C:/mingw64/x86_64-w64-mingw32/lib ==="
+          ls /c/mingw64/x86_64-w64-mingw32/lib/ 2>/dev/null | head -20 || echo "not found"
+
+      - name: Check runtime (UCRT vs MSVCRT)
+        shell: bash
+        run: |
+          echo "=== Checking for UCRT ==="
+          ls /c/mingw64/x86_64-w64-mingw32/lib/libucrt*.a 2>/dev/null && echo "UCRT libraries found" || echo "No UCRT libraries"
+          echo ""
+          echo "=== Checking for MSVCRT ==="
+          ls /c/mingw64/x86_64-w64-mingw32/lib/libmsvcrt*.a 2>/dev/null && echo "MSVCRT libraries found" || echo "No MSVCRT libraries"
+          echo ""
+          echo "=== CRT startup objects ==="
+          ls /c/mingw64/x86_64-w64-mingw32/lib/crt*.o 2>/dev/null || echo "not found"
+
+      - name: Thread model test
+        shell: bash
+        run: |
+          echo "=== Compile test for thread model ==="
+          cat > /tmp/thread_test.cpp << 'EOF'
+          #include <iostream>
+          #include <thread>
+          int main() {
+              std::cout << "Thread support: OK" << std::endl;
+              return 0;
+          }
+          EOF
+          g++ -v /tmp/thread_test.cpp -o /tmp/thread_test.exe 2>&1 | grep -i "thread\|posix\|win32\|mcf"
+
+      - name: PATH contents
+        shell: bash
+        run: |
+          echo "=== PATH (one per line) ==="
+          echo "$PATH" | tr ':' '\n' | grep -i mingw
+
+      - name: Other MinGW installations
+        shell: bash
+        run: |
+          echo "=== Strawberry Perl GCC ==="
+          /c/Strawberry/c/bin/gcc.exe --version 2>/dev/null || echo "Strawberry GCC not found"
+          echo ""
+          echo "=== MSYS2 GCC ==="
+          /c/msys64/mingw64/bin/gcc.exe --version 2>/dev/null || echo "MSYS2 GCC not found"
+          echo ""
+          echo "=== Git MinGW ==="
+          "/c/Program Files/Git/mingw64/bin/gcc.exe" --version 2>/dev/null || echo "Git MinGW GCC not found"
+
   build_windows:
     runs-on: ${{ matrix.runner }}
     name: ${{ matrix.name }}
