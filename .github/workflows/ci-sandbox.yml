@@ -79,8 +79,6 @@ jobs:
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
               "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -Wa,-mbig-obj -Wno-error=conversion-null"
               "-DCMAKE_C_FLAGS=-Wa,-mbig-obj"
-              "-DCMAKE_EXE_LINKER_FLAGS=-LC:/Strawberry/c/lib"
-              "-DCMAKE_SHARED_LINKER_FLAGS=-LC:/Strawberry/c/lib"
               -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
             cmake-generator: Ninja
             disable-ccache: true
@@ -110,8 +108,6 @@ jobs:
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
               "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -Wa,-mbig-obj -Wno-error=conversion-null"
               "-DCMAKE_C_FLAGS=-Wa,-mbig-obj"
-              "-DCMAKE_EXE_LINKER_FLAGS=-LC:/Strawberry/c/lib"
-              "-DCMAKE_SHARED_LINKER_FLAGS=-LC:/Strawberry/c/lib"
               -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
             cmake-generator: Ninja
             disable-ccache: true
@@ -144,6 +140,20 @@ jobs:
           for patch in _ci-sandbox/.github/patches/*.patch; do
             [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
           done
+
+      - name: Create libssp stubs
+        if: ${{ matrix.use-msys-setup != true }}
+        shell: bash
+        run: |
+          # Find GCC library path (directory containing libgcc)
+          GCC_LIB_PATH=$(dirname "$(gcc -print-libgcc-file-name)")
+          echo "GCC library path: $GCC_LIB_PATH"
+          # Create empty dummy archives (same approach as MSYS2 PR #13405)
+          # This satisfies linker when it adds -lssp -lssp_nonshared
+          ar rcs "$GCC_LIB_PATH/libssp.a"
+          ar rcs "$GCC_LIB_PATH/libssp_nonshared.a"
+          echo "Created dummy libssp stubs in $GCC_LIB_PATH"
+          ls -la "$GCC_LIB_PATH/libssp"* || echo "No libssp files found"
 
       - name: Setup MSYS2
         if: ${{ matrix.use-msys-setup == true }}
