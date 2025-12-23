@@ -185,6 +185,25 @@ jobs:
             msys-msystem: MINGW64
             msys-install: mingw-w64-x86_64-crt-git mingw-w64-x86_64-gcc mingw-w64-x86_64-ninja mingw-w64-x86_64-ccache
             msys-path: D:/a/_temp/msys64/mingw64/bin
+            
+          - name: Windows GCC Release (MSYS2 MINGW64 WebSocket streaming ON)
+            runner: windows-latest
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DCMAKE_C_COMPILER=gcc
+              -DCMAKE_CXX_COMPILER=g++
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+              "-DCMAKE_CXX_FLAGS=-Wno-deprecated-declarations -Wno-overloaded-virtual -Wa,-mbig-obj -Wno-error=conversion-null"
+              "-DCMAKE_C_FLAGS=-Wa,-mbig-obj"
+            cmake-generator: Ninja
+            disable-ccache: true
+            enable-32bit: false
+            use-msys-setup: true
+            msys-msystem: MINGW64
+            msys-install: mingw-w64-x86_64-crt-git mingw-w64-x86_64-gcc mingw-w64-x86_64-ninja mingw-w64-x86_64-ccache
+            msys-path: D:/a/_temp/msys64/mingw64/bin
+
           - name: Windows GCC Release (MSYS2 UCRT64)
             runner: windows-latest
             cmake-build-type: Release
