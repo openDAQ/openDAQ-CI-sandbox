@@ -270,6 +270,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     # ${{ }} expression syntax because of leading '!'
     # if: ${{ ! github.event.pull_request.draft }}
+    if: false
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
@@ -394,3 +395,35 @@ jobs:
         if: ${{ matrix.disable-ccache != true }}
         run: ccache -sv
       # TODO: End of sandbox-only steps
+
+  # Test double to uint8_t undefined behavior on different platforms
+  test_ub:
+    name: Test UB (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS ARM
+            runner: macos-latest
+          - name: macOS Intel
+            runner: macos-15-intel
+          - name: Linux
+            runner: ubuntu-latest
+
+    steps:
+      - name: Checkout CI sandbox
+        uses: actions/checkout@v4
+
+      - name: Test double to uint8_t UB
+        run: |
+          echo "=== Testing undefined behavior: double -> uint8_t ==="
+          echo ""
+          echo "--- Compile with -O0 (no optimization) ---"
+          clang++ -O0 -o test_ub_O0 tests/test_double_to_uint8_ub.cpp
+          ./test_ub_O0 || true
+          echo ""
+          echo "--- Compile with -O2 (optimization) ---"
+          clang++ -O2 -o test_ub_O2 tests/test_double_to_uint8_ub.cpp
+          ./test_ub_O2 || echo "CRASHED (expected on ARM with UB)"
