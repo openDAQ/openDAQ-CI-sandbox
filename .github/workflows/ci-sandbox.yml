@@ -133,6 +133,7 @@ jobs:
           cmake-generator: ${{ matrix.cmake-generator }}
           enable-tests: true
           enable-32bit: ${{ matrix.enable-32bit == true }}
+          ctest-preset: ${{ env.ctest_preset }}
 
       # TODO: Remove this 1 step before merging to openDAQ/openDAQ
       - name: Show ccache statistics
@@ -222,6 +223,14 @@ jobs:
         shell: bash
         run: cp -r _ci-sandbox/.github/actions .github/
 
+      - name: Apply patches
+        if: github.repository != 'openDAQ/openDAQ'
+        shell: bash
+        run: |
+          for patch in _ci-sandbox/.github/patches/*.patch; do
+            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
+          done
+
       - name: Setup ccache
         if: ${{ matrix.disable-ccache != true }}
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
@@ -241,6 +250,7 @@ jobs:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-generator: ${{ matrix.cmake-generator }}
           enable-tests: true
+          ctest-preset: ${{ env.ctest_preset }}
 
       # TODO: Remove this 1 step before merging to openDAQ/openDAQ
       - name: Show ccache statistics
@@ -273,7 +283,7 @@ jobs:
             cmake-generator: Ninja
             cmake-build-type: Release
             cmake-defines: >-
-              -DCMAKE_C_COMPILER=clang 
+              -DCMAKE_C_COMPILER=clang
               -DCMAKE_CXX_COMPILER=clang++ 
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
               -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
@@ -284,8 +294,8 @@ jobs:
             cmake-generator: Ninja
             cmake-build-type: Release
             cmake-defines: >-
-              -DCMAKE_C_COMPILER=clang 
-              -DCMAKE_CXX_COMPILER=clang++ 
+              -DCMAKE_C_COMPILER=clang
+              -DCMAKE_CXX_COMPILER=clang++
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
               -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
             disable-ccache: 
@@ -309,6 +319,14 @@ jobs:
         if: github.repository != 'openDAQ/openDAQ'
         shell: bash
         run: cp -r _ci-sandbox/.github/actions .github/
+
+      - name: Apply patches
+        if: github.repository != 'openDAQ/openDAQ'
+        shell: bash
+        run: |
+          for patch in _ci-sandbox/.github/patches/*.patch; do
+            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
+          done
 
       - name: Setup ccache
         id: ccache-setup
@@ -354,6 +372,7 @@ jobs:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-generator: ${{ matrix.cmake-generator }}
           enable-tests: true
+          ctest-preset: ${{ env.ctest_preset }}
 
       # Save ccache on build failure to preserve compilation progress
       - name: Save ccache on failure

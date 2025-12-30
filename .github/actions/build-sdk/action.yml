@@ -30,6 +30,10 @@ inputs:
     description: 'Run tests after build'
     required: false
     default: 'false'
+  ctest-preset:
+    description: 'CTest preset name'
+    required: false
+    default: ''
 
 outputs:
   gtest-xml-path:
@@ -59,7 +63,7 @@ runs:
       uses: jwlawson/actions-setup-cmake@v2
 
     - name: Install Windows dependencies
-      if: runner.os == 'Windows'
+      if: runner.os == 'Windows' && inputs.additional-dependencies != ''
       shell: pwsh
       run: choco install ${{ inputs.additional-dependencies }} -y --no-progress
 
@@ -178,16 +182,19 @@ runs:
         echo "gtest-xml-path=$GTEST_XML_PATH" >> "$GITHUB_OUTPUT"
 
         CTEST_ARGS=""
-        if [ -n "$CMAKE_BUILD_TYPE" ]; then
-          CTEST_ARGS="--build-config $CMAKE_BUILD_TYPE"
+        if [ -n "${{ inputs.ctest-preset }}" ]; then
+          CTEST_ARGS="--preset ${{ inputs.ctest-preset }}"
         fi
 
-        # Use sudo if available (needed for tests requiring elevated privileges)
+        if [ -n "$CMAKE_BUILD_TYPE" ]; then
+          CTEST_ARGS="$CTEST_ARGS --build-config $CMAKE_BUILD_TYPE"
+        fi
+
         SUDO_CMD=""
         if command -v sudo &> /dev/null; then
           SUDO_CMD="sudo -E"
         fi
 
         echo "::group::CTest"
-        $SUDO_CMD ctest --test-dir "$CMAKE_BUILD_PATH" --preset run_tests --output-on-failure $CTEST_ARGS
+        $SUDO_CMD ctest --test-dir "$CMAKE_BUILD_PATH" --output-on-failure $CTEST_ARGS
         echo "::endgroup::"
