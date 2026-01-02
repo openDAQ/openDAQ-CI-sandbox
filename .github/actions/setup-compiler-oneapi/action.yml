@@ -1,0 +1,148 @@
+name: Setup Intel oneAPI Compiler
+description: Install and configure Intel oneAPI C++ compiler (icx)
+
+runs:
+  using: composite
+  steps:
+    - name: Compute cache key
+      id: cache-key
+      shell: pwsh
+      run: |
+        $url = "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/1f18901e-877d-469d-a41a-a10f11b39336/intel-oneapi-base-toolkit-2025.3.0.372_offline.exe"
+        $hash = (Get-FileHash -InputStream ([System.IO.MemoryStream]::new([System.Text.Encoding]::UTF8.GetBytes($url))) -Algorithm SHA256).Hash.Substring(0, 8)
+        $key = "oneapi-windows-x86-64-$hash"
+        Write-Host "Installer URL: $url"
+        Write-Host "Cache key: $key"
+        "url=$url" >> $env:GITHUB_OUTPUT
+        "key=$key" >> $env:GITHUB_OUTPUT
+
+    - name: Restore cache
+      id: cache-restore
+      uses: actions/cache/restore@v4
+      with:
+        path: C:\Program Files (x86)\Intel\oneAPI\compiler
+        key: ${{ steps.cache-key.outputs.key }}
+
+    - name: Download installer
+      if: steps.cache-restore.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      shell: pwsh
+      env:
+        ONEAPI_URL: ${{ steps.cache-key.outputs.url }}
+      run: |
+        Write-Host "Downloading Intel oneAPI Base Toolkit..."
+        curl.exe -L -o "$env:TEMP\oneapi_installer.exe" $env:ONEAPI_URL --retry 5 --retry-delay 5
+        Write-Host "Download complete"
+
+    - name: Install oneAPI
+      if: steps.cache-restore.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Write-Host "Extracting installer..."
+        $extract = Start-Process -Wait -PassThru -FilePath "$env:TEMP\oneapi_installer.exe" `
+          -ArgumentList "-s", "-x", "-f", "$env:TEMP\oneapi_extracted", "--log", "extract.log"
+        if ($extract.ExitCode -ne 0) {
+          Write-Error "Extraction failed with exit code $($extract.ExitCode)"
+          Get-Content extract.log -ErrorAction SilentlyContinue
+          exit 1
+        }
+
+        Write-Host "Installing component: intel.oneapi.win.cpp-dpcpp-common"
+        $installArgs = "-s --action install --eula=accept --components=intel.oneapi.win.cpp-dpcpp-common -p=NEED_VS2017_INTEGRATION=0 -p=NEED_VS2019_INTEGRATION=0 -p=NEED_VS2022_INTEGRATION=0 --log-dir=."
+        Write-Host "Running: bootstrapper.exe $installArgs"
+        $install = Start-Process -Wait -PassThru -FilePath "$env:TEMP\oneapi_extracted\bootstrapper.exe" -ArgumentList $installArgs
+        if ($install.ExitCode -ne 0) {
+          Write-Error "Installation failed with exit code $($install.ExitCode)"
+          Get-ChildItem *.log | ForEach-Object { Write-Host "=== $($_.Name) ==="; Get-Content $_ }
+          exit 1
+        }
+
+        # Verify installation
+        $compilerPath = "C:\Program Files (x86)\Intel\oneAPI\compiler"
+        if (-not (Test-Path $compilerPath)) {
+          Write-Error "Compiler directory not found after installation"
+          Write-Host "Contents of Intel oneAPI directory:"
+          Get-ChildItem "C:\Program Files (x86)\Intel\oneAPI" -ErrorAction SilentlyContinue
+          exit 1
+        }
+        Write-Host "Installation complete"
+        Get-ChildItem $compilerPath
+
+        # Cleanup installer files
+        Remove-Item -Force "$env:TEMP\oneapi_installer.exe" -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force "$env:TEMP\oneapi_extracted" -ErrorAction SilentlyContinue
+
+    - name: Cleanup unnecessary files
+      if: steps.cache-restore.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $compilerRoot = "C:\Program Files (x86)\Intel\oneAPI\compiler"
+        $latestVersion = Get-ChildItem -Directory $compilerRoot |
+          Where-Object { $_.Name -ne "latest" } |
+          Sort-Object Name -Descending |
+          Select-Object -First 1 -ExpandProperty Name
+
+        Write-Host "Cleaning up unnecessary files for version: $latestVersion"
+
+        # Remove 32-bit and specialized components to reduce cache size
+        $dirsToRemove = @(
+          "$compilerRoot\$latestVersion\lib\ia32_win",
+          "$compilerRoot\$latestVersion\bin\intel64_ia32",
+          "$compilerRoot\$latestVersion\lib\emu",
+          "$compilerRoot\$latestVersion\lib\oclfpga",
+          "$compilerRoot\$latestVersion\bin\ocloc",
+          "$compilerRoot\$latestVersion\lib\x86"
+        )
+
+        foreach ($dir in $dirsToRemove) {
+          if (Test-Path $dir) {
+            Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+            Write-Host "Removed: $dir"
+          }
+        }
+
+        Write-Host "Cleanup complete"
+
+    - name: Save cache
+      if: steps.cache-restore.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      uses: actions/cache/save@v4
+      with:
+        path: C:\Program Files (x86)\Intel\oneAPI\compiler
+        key: ${{ steps.cache-key.outputs.key }}
+
+    - name: Export oneAPI environment
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Write-Host "Capturing environment variables from setvars.bat..."
+
+        $before = @{}
+        Get-ChildItem Env: | ForEach-Object { $before[$_.Name] = $_.Value }
+
+        $setvars = "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+        $count = 0
+
+        cmd /c "`"$setvars`" >nul 2>&1 && set" | ForEach-Object {
+          if ($_ -match '^([^=]+)=(.*)$') {
+            $name = $matches[1]
+            $value = $matches[2]
+            if (-not $before.ContainsKey($name) -or $before[$name] -ne $value) {
+              "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+              $count++
+            }
+          }
+        }
+
+        Write-Host "Exported $count environment variables to GITHUB_ENV"
+
+    - name: Verify compiler
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Write-Host "Verifying Intel oneAPI compiler..."
+        $icxPath = Get-Command icx -ErrorAction SilentlyContinue
+        if (-not $icxPath) {
+          Write-Error "icx compiler not found in PATH"
+          exit 1
+        }
+        Write-Host "Found: $($icxPath.Source)"
+        icx --version
