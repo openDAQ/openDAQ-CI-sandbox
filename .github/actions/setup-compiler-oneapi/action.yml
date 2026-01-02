@@ -113,15 +113,20 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        Write-Host "Capturing environment variables from setvars.bat..."
+        Write-Host "Capturing environment variables from compiler vars.bat..."
 
         $before = @{}
         Get-ChildItem Env: | ForEach-Object { $before[$_.Name] = $_.Value }
 
-        $setvars = "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
-        $count = 0
+        # Use the compiler's own vars.bat which is inside the cached directory
+        $varsScript = "C:\Program Files (x86)\Intel\oneAPI\compiler\latest\env\vars.bat"
+        if (-not (Test-Path $varsScript)) {
+          Write-Error "Compiler vars.bat not found at: $varsScript"
+          exit 1
+        }
 
-        cmd /c "`"$setvars`" >nul 2>&1 && set" | ForEach-Object {
+        $count = 0
+        cmd /c "`"$varsScript`" >nul 2>&1 && set" | ForEach-Object {
           if ($_ -match '^([^=]+)=(.*)$') {
             $name = $matches[1]
             $value = $matches[2]

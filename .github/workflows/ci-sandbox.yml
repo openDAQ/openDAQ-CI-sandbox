@@ -24,6 +24,7 @@ jobs:
     runs-on: windows-latest
     name: Test Intel oneAPI Setup
     timeout-minutes: 30
+    if: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,7 +50,6 @@ jobs:
     runs-on: windows-latest
     name: ${{ matrix.name }}
     # if: ${{ ! github.event.pull_request.draft }}
-    if: false
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
@@ -59,47 +59,75 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Windows VS 2022 x64 Release
-            cmake-build-type: Release
-            cmake-defines:
-            cmake-generator: "Visual Studio 17 2022"
-            enable-tests: true
-          - name: Windows VS 2022 x64 Debug
-            cmake-build-type: Debug
-            cmake-defines:
-            cmake-generator: "Visual Studio 17 2022"
-            enable-tests: true
-            disable-ccache : true
-          - name: Windows VS 2022 Win32 Release
-            cmake-build-type: Release
-            cmake-defines: -A Win32
-            cmake-generator: "Visual Studio 17 2022"
-            enable-32bit: true
-            enable-tests: true
-            disable-ccache : true
+          # - name: Windows VS 2022 x64 Release
+          #   cmake-build-type: Release
+          #   cmake-defines:
+          #   cmake-generator: "Visual Studio 17 2022"
+          #   enable-tests: true
+          # - name: Windows VS 2022 x64 Debug
+          #   cmake-build-type: Debug
+          #   cmake-defines:
+          #   cmake-generator: "Visual Studio 17 2022"
+          #   enable-tests: true
+          #   disable-ccache : true
+          # - name: Windows VS 2022 Win32 Release
+          #   cmake-build-type: Release
+          #   cmake-defines: -A Win32
+          #   cmake-generator: "Visual Studio 17 2022"
+          #   enable-32bit: true
+          #   enable-tests: true
+          #   disable-ccache : true
 
-          - name: Windows Clang Release
+          # - name: Windows Clang Release
+          #   cmake-build-type: Release
+          #   cmake-defines: >-
+          #     -DCMAKE_C_COMPILER=clang
+          #     -DCMAKE_CXX_COMPILER=clang++
+          #   cmake-generator: Ninja
+          #   enable-tests: true
+          #   disable-ccache : true
+
+          # - name: Windows GCC Release
+          #   cmake-build-type: Release
+          #   cmake-defines: >-
+          #     -DCMAKE_C_COMPILER=gcc
+          #     -DCMAKE_CXX_COMPILER=g++
+          #     "-DCMAKE_CXX_FLAGS=-Wa,-mbig-obj -Wno-deprecated-declarations -Wno-error=conversion-null"
+          #     "-DCMAKE_C_FLAGS=-Wa,-mbig-obj"
+          #   cmake-generator: Ninja
+          #   # Tests are disabled due to:
+          #   # - test_device_modules memory corruption
+          #   # - Python tests module resolution issues
+          #   enable-tests: false
+          #   disable-ccache: true
+
+          - name: Windows Intel oneAPI Release
             cmake-build-type: Release
             cmake-defines: >-
-              -DCMAKE_C_COMPILER=clang 
-              -DCMAKE_CXX_COMPILER=clang++
+              -DCMAKE_C_COMPILER=icx
+              -DCMAKE_CXX_COMPILER=icx
+              -DOPENDAQ_ENABLE_OPCUA=OFF
+              -DDAQMODULES_EMPTY_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
+              -DDAQMODULES_REF_DEVICE_MODULE=OFF
+              -DDAQMODULES_REF_FB_MODULE=OFF
+              -DDAQMODULES_AUDIO_DEVICE_MODULE=OFF
+              -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+              -DAPP_ENABLE_WEBPAGE_EXAMPLES=OFF
+              -DOPENDAQ_DOCUMENTATION_TESTS=OFF
+              -DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF
+              -DOPENDAQ_ENABLE_OPCUA_INTEGRATION_TESTS=OFF
+              -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF
+              -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
+              -DOPENDAQ_GENERATE_C_BINDINGS=OFF
             cmake-generator: Ninja
-            enable-tests: true
-            disable-ccache : true
-
-          - name: Windows GCC Release
-            cmake-build-type: Release
-            cmake-defines: >-
-              -DCMAKE_C_COMPILER=gcc
-              -DCMAKE_CXX_COMPILER=g++
-              "-DCMAKE_CXX_FLAGS=-Wa,-mbig-obj -Wno-deprecated-declarations -Wno-error=conversion-null"
-              "-DCMAKE_C_FLAGS=-Wa,-mbig-obj"
-            cmake-generator: Ninja
-            # Tests are disabled due to: 
-            # - test_device_modules memory corruption
-            # - Python tests module resolution issues
+            enable-32bit: false
             enable-tests: false
-            disable-ccache : true
+            disable-ccache: true
+            use-oneapi: true
+
 
     steps:
       # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
@@ -124,6 +152,10 @@ jobs:
         if: github.repository != 'openDAQ/openDAQ'
         shell: bash
         run: |
+          if [ ! -d "_ci-sandbox/.github/patches" ]; then
+            echo "No patches directory, nothing to apply"
+            exit 0
+          fi
           for patch in _ci-sandbox/.github/patches/*.patch; do
             [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
           done
@@ -135,6 +167,10 @@ jobs:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
           target-arch: ${{ matrix.enable-32bit == true && 'x86-32' || '' }}
+
+      - name: Setup Intel oneAPI
+        if: matrix.use-oneapi == true
+        uses: ./.github/actions/setup-compiler-oneapi
       # TODO: End of sandbox-only steps
 
       - name: Build and Test
@@ -145,7 +181,7 @@ jobs:
           cmake-config-preset: ${{ env.cmake_preset }}
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-generator: ${{ matrix.cmake-generator }}
-          enable-tests: true
+          enable-tests: ${{ matrix.enable-tests == true }}
           enable-32bit: ${{ matrix.enable-32bit == true }}
           ctest-preset: ${{ env.ctest_preset }}
 
@@ -250,6 +286,10 @@ jobs:
         if: github.repository != 'openDAQ/openDAQ'
         shell: bash
         run: |
+          if [ ! -d "_ci-sandbox/.github/patches" ]; then
+            echo "No patches directory, nothing to apply"
+            exit 0
+          fi
           for patch in _ci-sandbox/.github/patches/*.patch; do
             [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
           done
@@ -347,6 +387,10 @@ jobs:
         if: github.repository != 'openDAQ/openDAQ'
         shell: bash
         run: |
+          if [ ! -d "_ci-sandbox/.github/patches" ]; then
+            echo "No patches directory, nothing to apply"
+            exit 0
+          fi
           for patch in _ci-sandbox/.github/patches/*.patch; do
             [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
           done
