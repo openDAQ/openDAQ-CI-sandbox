@@ -1,0 +1,13 @@
+diff --git a/bindings/dotnet/CMakeLists.txt b/bindings/dotnet/CMakeLists.txt
+index bdfd478d..bddeb07f 100644
+--- a/bindings/dotnet/CMakeLists.txt
++++ b/bindings/dotnet/CMakeLists.txt
+@@ -112,7 +112,7 @@ add_custom_command(OUTPUT "$<${configEnabled}:${outFile}>"
+ add_custom_target(${targetName} ALL
+                   COMMENT "[${targetName}] target (${platform}/$<CONFIG>)"
+                   DEPENDS "$<${configEnabled}:${outFile}>"
+-                          dependencyFiles
++                          ${dependencyFiles}
+ )
+ 
+ #use all modules as dependency
