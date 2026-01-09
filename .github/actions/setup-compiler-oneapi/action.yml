@@ -4,37 +4,37 @@ description: Install and configure Intel oneAPI C++ compiler (icx)
 runs:
   using: composite
   steps:
-    - name: Compute cache key
-      id: cache-key
+    - name: Download installer
+      if: runner.os == 'Windows'
+      id: download-windows
       shell: pwsh
       run: |
         $url = "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/1f18901e-877d-469d-a41a-a10f11b39336/intel-oneapi-base-toolkit-2025.3.0.372_offline.exe"
-        $hash = (Get-FileHash -InputStream ([System.IO.MemoryStream]::new([System.Text.Encoding]::UTF8.GetBytes($url))) -Algorithm SHA256).Hash.Substring(0, 8)
-        $key = "oneapi-windows-x86-64-$hash"
-        Write-Host "Installer URL: $url"
-        Write-Host "Cache key: $key"
-        "url=$url" >> $env:GITHUB_OUTPUT
-        "key=$key" >> $env:GITHUB_OUTPUT
+        $output = "$env:TEMP\oneapi_installer.exe"
 
-    - name: Restore cache
-      id: cache-restore
-      uses: actions/cache/restore@v4
-      with:
-        path: C:\Program Files (x86)\Intel\oneAPI\compiler
-        key: ${{ steps.cache-key.outputs.key }}
-
-    - name: Download installer
-      if: steps.cache-restore.outputs.cache-hit != 'true' && runner.os == 'Windows'
-      shell: pwsh
-      env:
-        ONEAPI_URL: ${{ steps.cache-key.outputs.url }}
-      run: |
         Write-Host "Downloading Intel oneAPI Base Toolkit..."
-        curl.exe -L -o "$env:TEMP\oneapi_installer.exe" $env:ONEAPI_URL --retry 5 --retry-delay 5
-        Write-Host "Download complete"
+        Write-Host "See: https://github.com/oneapi-src/oneapi-ci"
+        Write-Host "URL: $url"
+        Write-Host "Output: $output"
+
+        curl.exe -L -o $output $url --retry 5 --retry-delay 5 --fail --show-error
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Download failed with exit code $LASTEXITCODE"
+          exit 1
+        }
+
+        if (-not (Test-Path $output)) {
+          Write-Error "Downloaded file not found: $output"
+          exit 1
+        }
+
+        $size = (Get-Item $output).Length / 1MB
+        Write-Host "Download complete: $([math]::Round($size, 2)) MB"
 
     - name: Install oneAPI
-      if: steps.cache-restore.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      if: runner.os == 'Windows'
+      id: install-windows
       shell: pwsh
       run: |
         Write-Host "Extracting installer..."
@@ -71,73 +71,17 @@ runs:
         Remove-Item -Force "$env:TEMP\oneapi_installer.exe" -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "$env:TEMP\oneapi_extracted" -ErrorAction SilentlyContinue
 
-    - name: Cleanup unnecessary files
-      if: steps.cache-restore.outputs.cache-hit != 'true' && runner.os == 'Windows'
-      shell: pwsh
-      run: |
-        $compilerRoot = "C:\Program Files (x86)\Intel\oneAPI\compiler"
-        $latestVersion = Get-ChildItem -Directory $compilerRoot |
-          Where-Object { $_.Name -ne "latest" } |
-          Sort-Object Name -Descending |
-          Select-Object -First 1 -ExpandProperty Name
-
-        Write-Host "Cleaning up unnecessary files for version: $latestVersion"
-
-        # Remove 32-bit and specialized components to reduce cache size
-        $dirsToRemove = @(
-          "$compilerRoot\$latestVersion\lib\ia32_win",
-          "$compilerRoot\$latestVersion\bin\intel64_ia32",
-          "$compilerRoot\$latestVersion\lib\emu",
-          "$compilerRoot\$latestVersion\lib\oclfpga",
-          "$compilerRoot\$latestVersion\bin\ocloc",
-          "$compilerRoot\$latestVersion\lib\x86"
-        )
-
-        foreach ($dir in $dirsToRemove) {
-          if (Test-Path $dir) {
-            Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
-            Write-Host "Removed: $dir"
-          }
-        }
-
-        Write-Host "Cleanup complete"
-
-    - name: Save cache
-      if: steps.cache-restore.outputs.cache-hit != 'true' && runner.os == 'Windows'
-      uses: actions/cache/save@v4
-      with:
-        path: C:\Program Files (x86)\Intel\oneAPI\compiler
-        key: ${{ steps.cache-key.outputs.key }}
+        # Output scripts for environment setup
+        "scripts<<EOF" >> $env:GITHUB_OUTPUT
+        "C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat" >> $env:GITHUB_OUTPUT
+        "C:\Program Files (x86)\Intel\oneAPI\compiler\latest\env\vars.bat" >> $env:GITHUB_OUTPUT
+        "EOF" >> $env:GITHUB_OUTPUT
 
     - name: Export oneAPI environment
       if: runner.os == 'Windows'
-      shell: pwsh
-      run: |
-        Write-Host "Capturing environment variables from compiler vars.bat..."
-
-        $before = @{}
-        Get-ChildItem Env: | ForEach-Object { $before[$_.Name] = $_.Value }
-
-        # Use the compiler's own vars.bat which is inside the cached directory
-        $varsScript = "C:\Program Files (x86)\Intel\oneAPI\compiler\latest\env\vars.bat"
-        if (-not (Test-Path $varsScript)) {
-          Write-Error "Compiler vars.bat not found at: $varsScript"
-          exit 1
-        }
-
-        $count = 0
-        cmd /c "`"$varsScript`" >nul 2>&1 && set" | ForEach-Object {
-          if ($_ -match '^([^=]+)=(.*)$') {
-            $name = $matches[1]
-            $value = $matches[2]
-            if (-not $before.ContainsKey($name) -or $before[$name] -ne $value) {
-              "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-              $count++
-            }
-          }
-        }
-
-        Write-Host "Exported $count environment variables to GITHUB_ENV"
+      uses: ./.github/actions/source-script
+      with:
+        scripts: ${{ steps.install-windows.outputs.scripts }}
 
     - name: Verify compiler
       if: runner.os == 'Windows'

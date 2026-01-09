@@ -1,0 +1,15 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 6b14d5e3..57795a53 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -719,6 +719,10 @@ if(CMAKE_COMPILER_IS_CLANGXX)
+         set(CLANG_FLAGS "${CLANG_FLAGS} \
+             -Xclang -Wno-delete-non-abstract-non-virtual-dtor"
+         )
++        # Use precise floating-point model to avoid aggressive optimizations
++        set(CLANG_FLAGS "${CLANG_FLAGS} /fp:precise")
++        # Use MSVC runtime for standard library paths
++        set(CLANG_FLAGS "${CLANG_FLAGS} /Qm")
+     endif ()
+ 
+     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_FLAGS}")
