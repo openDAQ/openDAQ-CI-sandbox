@@ -1,5 +1,5 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 6b14d5e3..57795a53 100644
+index 6b14d5e3..e486d0ee 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -719,6 +719,10 @@ if(CMAKE_COMPILER_IS_CLANGXX)
@@ -8,8 +8,8 @@ index 6b14d5e3..57795a53 100644
          )
 +        # Use precise floating-point model to avoid aggressive optimizations
 +        set(CLANG_FLAGS "${CLANG_FLAGS} /fp:precise")
-+        # Use MSVC runtime for standard library paths
-+        set(CLANG_FLAGS "${CLANG_FLAGS} /Qm")
++        # Exclude Intel math library to avoid libmmd.dll runtime dependency
++        add_link_options(/NODEFAULTLIB:libmmd)
      endif ()
  
      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CLANG_FLAGS}")
