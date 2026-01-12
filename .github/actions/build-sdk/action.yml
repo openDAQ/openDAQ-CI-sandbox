@@ -100,17 +100,14 @@ runs:
 
         if [ "$ENABLE_32BIT" == "true" ]; then
           sudo dpkg --add-architecture i386
-          DEV_PACKAGES=("${DEV_PACKAGES[@]/%/:i386}" python3:i386 python3-dev:i386 python3-pip)
+          DEV_PACKAGES=("${DEV_PACKAGES[@]/%/:i386}" python3:i386 python3-dev:i386 gcc-multilib g++-multilib \
+            libx11-6:i386 libxrandr2:i386 libxcursor1:i386 libxi6:i386 libgl1:i386)
         fi
 
         sudo apt-get update && sudo apt-get install -y --no-install-recommends \
           ${{ inputs.additional-dependencies || '' }} \
           lld mono-runtime libmono-system-json-microsoft4.0-cil libmono-system-data4.0-cil \
           "${DEV_PACKAGES[@]}"
-
-        if [ "$ENABLE_32BIT" == "true" ]; then
-          sudo ln -sf /usr/bin/python3 /usr/bin/python
-        fi
 
     - name: Install macOS dependencies
       if: runner.os == 'macOS'
@@ -148,16 +145,11 @@ runs:
       uses: ./.github/actions/setup-compiler-icx
 
     - name: Install Python dependencies
+      if: ${{ !(inputs.enable-32bit == 'true' && runner.os == 'Linux') }}
       shell: bash
-      env:
-        ENABLE_32BIT: ${{ inputs.enable-32bit }}
       run: |
         echo "Installing numpy for Python: $(python --version)"
-        PIP_FLAGS=""
-        if [ "$ENABLE_32BIT" == "true" ] && [ "$RUNNER_OS" == "Linux" ]; then
-          PIP_FLAGS="--break-system-packages"
-        fi
-        python -m pip install numpy $PIP_FLAGS
+        python -m pip install numpy
         echo "Done installing Python dependencies"
 
     - name: Configure
