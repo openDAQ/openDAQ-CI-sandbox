@@ -210,7 +210,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-${{ github.head_ref }}-${{ matrix.name }}
       cancel-in-progress: true
-    timeout-minutes: 180
+    timeout-minutes: 240
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
