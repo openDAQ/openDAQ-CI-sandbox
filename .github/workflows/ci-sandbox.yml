@@ -230,7 +230,7 @@ jobs:
               -DCMAKE_SYSTEM_NAME=Linux
               -DCMAKE_SYSTEM_PROCESSOR=i686
               -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-              "-DCMAKE_C_FLAGS_INIT=-m32 -fPIC"
+              "-DCMAKE_C_FLAGS_INIT=-m32 -fPIC -DOPENDAQ_BCRYPT_BF_ASM_DISABLE"
               "-DCMAKE_CXX_FLAGS_INIT=-m32 -fPIC -Wno-error=stringop-overflow"
               -DCMAKE_ASM_FLAGS_INIT=-m32
             disable-ccache : true
