@@ -159,11 +159,18 @@ runs:
         CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
         CMAKE_GENERATOR: ${{ inputs.cmake-generator }}
         CI_GIT_BRANCH: ${{ github.head_ref }}
+        ENABLE_32BIT: ${{ inputs.enable-32bit }}
       run: |
         CMAKE_BUILD_PATH="build"
         mkdir -p "$CMAKE_BUILD_PATH"
         CMAKE_BUILD_PATH=$(cd "$CMAKE_BUILD_PATH" && pwd)
         echo "build-path=$CMAKE_BUILD_PATH" >> "$GITHUB_OUTPUT"
+
+        # Detect Visual Studio generator
+        IS_VISUAL_STUDIO=false
+        if [[ "$CMAKE_GENERATOR" == "Visual Studio"* ]]; then
+          IS_VISUAL_STUDIO=true
+        fi
 
         CMAKE_ARGS=""
         if [ -n "${{ inputs.cmake-config-preset }}" ]; then
@@ -171,8 +178,17 @@ runs:
         fi
 
         # Visual Studio specific options
-        if [[ "$CMAKE_GENERATOR" == "Visual Studio"* ]]; then
+        if [ "$IS_VISUAL_STUDIO" == "true" ]; then
           CMAKE_ARGS="$CMAKE_ARGS -DOPENDAQ_MSVC_SINGLE_PROCESS_BUILD=ON"
+        fi
+
+        # 32-bit build configuration
+        if [ "$ENABLE_32BIT" == "true" ]; then
+          if [ "$IS_VISUAL_STUDIO" == "true" ]; then
+            CMAKE_ARGS="$CMAKE_ARGS -A Win32"
+          else
+            CMAKE_ARGS="$CMAKE_ARGS -DOPENDAQ_FORCE_COMPILE_32BIT=ON"
+          fi
         fi
 
         if [ -n "$CMAKE_BUILD_TYPE" ]; then
