@@ -10,6 +10,43 @@ on:
       - '.github/workflows/test-python-setup.yml'
 
 jobs:
+  test-apt-python-i386:
+    runs-on: ubuntu-latest
+    name: Ubuntu apt python3:i386
+    steps:
+      - name: Add i386 architecture
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+
+      - name: Search for python i386 packages
+        run: |
+          echo "=== Available python3:i386 packages ==="
+          apt-cache search python3 | grep i386 || echo "No i386 packages found via search"
+
+          echo "=== Check python versions availability ==="
+          for ver in 3.8 3.9 3.10 3.11 3.12 3.13 3.14; do
+            echo "--- python${ver}:i386 ---"
+            apt-cache show python${ver}:i386 2>&1 | head -5 || echo "python${ver}:i386 not available"
+          done
+
+          echo "=== Check python3:i386 (default) ==="
+          apt-cache show python3:i386 2>&1 | head -10 || echo "python3:i386 not available"
+
+          echo "=== Check python3-dev:i386 availability ==="
+          apt-cache show python3-dev:i386 2>&1 | head -10 || echo "python3-dev:i386 not available"
+
+      - name: Try to install python3:i386
+        run: |
+          sudo apt-get install -y python3:i386 || echo "Failed to install python3:i386"
+
+      - name: Check installed Python
+        run: |
+          which python3 || echo "python3 not found"
+          python3 --version || echo "python3 version failed"
+          file $(which python3) || echo "file command failed"
+          python3 -c "import struct; print(f'Pointer size: {struct.calcsize(\"P\")*8} bits')" || echo "arch check failed"
+
   test-python:
     runs-on: ${{ matrix.runner }}
     name: ${{ matrix.runner }} / Python ${{ matrix.python-version }} / ${{ matrix.architecture }}
