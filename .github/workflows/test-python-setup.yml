@@ -1,0 +1,78 @@
+name: Test Python Setup
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/test-python-setup.yml'
+  push:
+    paths:
+      - '.github/workflows/test-python-setup.yml'
+
+jobs:
+  test-python:
+    runs-on: ${{ matrix.runner }}
+    name: ${{ matrix.runner }} / Python ${{ matrix.python-version }} / ${{ matrix.architecture }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel, windows-latest]
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
+        architecture: ['x64', 'x86']
+        exclude:
+          # ARM runners don't support x86/x64 architecture parameter
+          - runner: ubuntu-24.04-arm
+            architecture: x86
+          - runner: ubuntu-24.04-arm
+            architecture: x64
+          # macOS doesn't need x86
+          - runner: macos-latest
+            architecture: x86
+          - runner: macos-15-intel
+            architecture: x86
+        include:
+          # ARM runners - test native architecture
+          - runner: ubuntu-24.04-arm
+            python-version: '3.8'
+            architecture: 'arm64'
+          - runner: ubuntu-24.04-arm
+            python-version: '3.9'
+            architecture: 'arm64'
+          - runner: ubuntu-24.04-arm
+            python-version: '3.10'
+            architecture: 'arm64'
+          - runner: ubuntu-24.04-arm
+            python-version: '3.11'
+            architecture: 'arm64'
+          - runner: ubuntu-24.04-arm
+            python-version: '3.12'
+            architecture: 'arm64'
+          - runner: ubuntu-24.04-arm
+            python-version: '3.13'
+            architecture: 'arm64'
+          - runner: ubuntu-24.04-arm
+            python-version: '3.14'
+            architecture: 'arm64'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }} (${{ matrix.architecture }})
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: ${{ matrix.architecture }}
+
+      - name: Check Python
+        shell: bash
+        run: |
+          echo "=== Python version ==="
+          python --version
+          which python
+
+          echo "=== Architecture ==="
+          python -c "import struct; print(f'Pointer size: {struct.calcsize(\"P\")*8} bits')"
+
+          echo "=== File type ==="
+          file $(which python) || echo "file command not available"
