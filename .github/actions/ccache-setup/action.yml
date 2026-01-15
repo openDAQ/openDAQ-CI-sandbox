@@ -111,7 +111,11 @@ runs:
 
         # Extract compiler from cmake-config-args (e.g., gcc-12, clang-14)
         # Using sed instead of grep -P for cross-platform compatibility (Windows Git Bash lacks Perl regex)
-        COMPILER=$(echo "$CMAKE_CONFIG_ARGS" | sed -n 's/.*-DCMAKE_CXX_COMPILER=\([^ ]*\).*/\1/p' | sed 's/+//g')
+        COMPILER=$(echo "$CMAKE_CONFIG_ARGS" | sed -n 's/.*-DCMAKE_CXX_COMPILER=\([^ ]*\).*/\1/p')
+        # Fallback to CXX environment variable if not found in cmake args
+        if [ -z "$COMPILER" ] && [ -n "$CXX" ]; then
+          COMPILER=$(basename "$CXX")
+        fi
         if [ -z "$COMPILER" ]; then
           COMPILER="unknown"
         fi
