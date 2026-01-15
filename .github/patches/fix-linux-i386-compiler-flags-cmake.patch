@@ -46,7 +46,7 @@ index c26f3257..51a03bb5 100644
 +
 +        # Linux GCC 32-bit specific flags
 +        if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_COMPILER_IS_GNUCXX)
-+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -ffloat-store -Wno-error=stringop-overflow")
++            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -ffloat-store")
 +            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 +            # Disable bcrypt ASM for i386 (x86.S not compatible)
 +            add_compile_definitions(OPENDAQ_BCRYPT_BF_ASM_DISABLE)
