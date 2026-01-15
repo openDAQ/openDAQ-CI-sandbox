@@ -19,22 +19,33 @@ jobs:
           sudo dpkg --add-architecture i386
           sudo apt-get update
 
-      - name: Search for python i386 packages
+      - name: Search for python i386 packages (default repos)
         run: |
-          echo "=== Available python3:i386 packages ==="
-          apt-cache search python3 | grep i386 || echo "No i386 packages found via search"
-
-          echo "=== Check python versions availability ==="
+          echo "=== Check python versions availability (default repos) ==="
           for ver in 3.8 3.9 3.10 3.11 3.12 3.13 3.14; do
             echo "--- python${ver}:i386 ---"
-            apt-cache show python${ver}:i386 2>&1 | head -5 || echo "python${ver}:i386 not available"
+            apt-cache show python${ver}:i386 2>&1 | head -3 || echo "not available"
           done
 
-          echo "=== Check python3:i386 (default) ==="
-          apt-cache show python3:i386 2>&1 | head -10 || echo "python3:i386 not available"
+      - name: Add deadsnakes PPA
+        run: |
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update
 
-          echo "=== Check python3-dev:i386 availability ==="
-          apt-cache show python3-dev:i386 2>&1 | head -10 || echo "python3-dev:i386 not available"
+      - name: Search for python i386 packages (with deadsnakes PPA)
+        run: |
+          echo "=== Check python versions availability (with deadsnakes PPA) ==="
+          for ver in 3.8 3.9 3.10 3.11 3.12 3.13 3.14; do
+            echo "--- python${ver}:i386 ---"
+            apt-cache show python${ver}:i386 2>&1 | head -3 || echo "not available"
+          done
+
+          echo "=== Check python3-dev versions ==="
+          for ver in 3.8 3.9 3.10 3.11 3.12 3.13 3.14; do
+            echo "--- python${ver}-dev:i386 ---"
+            apt-cache show python${ver}-dev:i386 2>&1 | head -3 || echo "not available"
+          done
 
       - name: Try to install python3:i386
         run: |
