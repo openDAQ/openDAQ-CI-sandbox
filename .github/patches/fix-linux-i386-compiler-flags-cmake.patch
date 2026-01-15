@@ -25,7 +25,7 @@ index c26f3257..51a03bb5 100644
 +        message(STATUS "  -> Set CMAKE_SYSTEM_NAME=Linux")
 +    endif()
 +    if(NOT CMAKE_SYSTEM_PROCESSOR)
-+        set(CMAKE_SYSTEM_PROCESSOR i686 CACHE STRING "" FORCE)
++        set(CMAKE_SYSTEM_PROCESSOR i386 CACHE STRING "" FORCE)
 +        message(STATUS "  -> Set CMAKE_SYSTEM_PROCESSOR=i686")
 +    endif()
 +
