@@ -166,7 +166,7 @@ jobs:
             exit 0
           fi
           for patch in _ci-sandbox/.github/patches/*.patch; do
-            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
+            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch" || true
           done
 
       - name: Setup ccache
@@ -247,17 +247,29 @@ jobs:
               -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
               -DCMAKE_C_COMPILER_LAUNCHER=ccache
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+              -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
             disable-ccache : false
             enable_32bit: false
 
-          # - name: Ubuntu Latest gcc-9 Release
-          #   cc: gcc-9
-          #   cxx: g++-9
-          #   additional-packages: g++-9
-          #   cmake-generator: Ninja
-          #   cmake-build-type: Release
-          #   cmake-defines:
-          #   disable-ccache : true
+          - name: Ubuntu Latest gcc-9 Release
+            cc: gcc-9
+            cxx: g++-9
+            additional-packages: g++-9
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
+            disable-ccache : true
+            enable_32bit: false
+
+          - name: Ubuntu Latest gcc-10 Release
+            cc: gcc-10
+            cxx: g++-10
+            additional-packages: g++-10
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: -DDAQMODULES_PARQUET_RECORDER_MODULE=ON
+            disable-ccache : true
+            enable_32bit: false
 
           # - name: Ubuntu Latest gcc-14 Release
           #   cc: gcc-14
@@ -344,7 +356,7 @@ jobs:
             exit 0
           fi
           for patch in _ci-sandbox/.github/patches/*.patch; do
-            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
+            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch" || true
           done
 
       - name: Setup ccache
@@ -458,7 +470,7 @@ jobs:
             exit 0
           fi
           for patch in _ci-sandbox/.github/patches/*.patch; do
-            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch"
+            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch" || true
           done
 
       - name: Setup ccache
