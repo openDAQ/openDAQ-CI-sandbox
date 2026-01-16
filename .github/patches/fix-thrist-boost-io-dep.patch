@@ -1,0 +1,12 @@
+diff --git a/external/boost/CMakeLists.txt b/external/boost/CMakeLists.txt
+index 5b102c43..82300918 100644
+--- a/external/boost/CMakeLists.txt
++++ b/external/boost/CMakeLists.txt
+@@ -113,6 +113,7 @@ if (Boost_FETCHED)
+             type_traits 
+             utility 
+             mp11
++            io
+             uuid
+         )
+ 
