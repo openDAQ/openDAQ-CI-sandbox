@@ -171,7 +171,11 @@ runs:
         CMAKE_BUILD_PATH="build"
         mkdir -p "$CMAKE_BUILD_PATH"
         CMAKE_BUILD_PATH=$(cd "$CMAKE_BUILD_PATH" && pwd)
-        echo "build-path=$CMAKE_BUILD_PATH" >> "$GITHUB_OUTPUT"
+        if command -v cygpath &> /dev/null; then
+          echo "build-path=$(cygpath -w "$CMAKE_BUILD_PATH")" >> "$GITHUB_OUTPUT"
+        else
+          echo "build-path=$CMAKE_BUILD_PATH" >> "$GITHUB_OUTPUT"
+        fi
 
         CMAKE_ARGS=""
         if [ -n "${{ inputs.cmake-config-preset }}" ]; then

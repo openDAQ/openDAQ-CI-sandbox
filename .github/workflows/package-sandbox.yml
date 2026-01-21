@@ -57,6 +57,7 @@ jobs:
               -DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF
               -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
               -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
+              -DDAQMODULES_SIMULATOR_DEVICE_MODULE=OFF
             cpack: NSIS
             disable-ccache: true
             enable-32bit: false
@@ -81,6 +82,7 @@ jobs:
               -DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF
               -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
               -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
+              -DDAQMODULES_SIMULATOR_DEVICE_MODULE=OFF
             cpack: NSIS
             disable-ccache: true
             enable-32bit: true
@@ -155,7 +157,6 @@ jobs:
           enable-32bit: ${{ matrix.enable-32bit == true }}
 
       - name: Cache build directory
-        if: steps.cache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: build

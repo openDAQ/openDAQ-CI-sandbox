@@ -42,6 +42,10 @@ runs:
       shell: bash
       run: |
         BUILD_PATH="${{ inputs.build-path }}"
+        # Convert Windows path to unix if needed
+        if command -v cygpath &> /dev/null; then
+          BUILD_PATH=$(cygpath -u "$BUILD_PATH")
+        fi
         CMAKE_BUILD_TYPE="${{ inputs.cmake-build-type }}"
         PYTHON_VERSIONS="${{ inputs.python-versions }}"
 

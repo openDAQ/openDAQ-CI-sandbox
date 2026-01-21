@@ -10,9 +10,6 @@ index e1483333..2e0900c4 100644
 +## Package filename customization
 +##
 +
-+option(OPENDAQ_PACKAGE_NAME_INCLUDE_SHA "Include git SHA in package filename" ON)
-+option(OPENDAQ_PACKAGE_NAME_INCLUDE_TWEAK "Include tweak version (4th component) in package filename" ON)
-+
 +# OS name
 +string(TOLOWER "${CMAKE_SYSTEM_NAME}" _PACKING_OS_NAME)
 +if(_PACKING_OS_NAME STREQUAL "darwin")
@@ -34,7 +31,7 @@ index e1483333..2e0900c4 100644
 +
 +# Compiler
 +if(MSVC AND CMAKE_VS_VERSION_BUILD_NUMBER)
-+set(_PACKING_COMPILER_VER "${CMAKE_VS_VERSION_BUILD_NUMBER}")
++    set(_PACKING_COMPILER_VER "${CMAKE_VS_VERSION_BUILD_NUMBER}")
 +    set(_PACKING_COMPILER_ID "msvc")
 +else()
 +    set(_PACKING_COMPILER_VER "${CMAKE_CXX_COMPILER_VERSION}")
@@ -45,15 +42,18 @@ index e1483333..2e0900c4 100644
 +    endif()
 +endif()
 +
-+# Assemble version string
++# Assemble version string with optional tweak (4th component)
 +set(_PACKING_VERSION "${OPENDAQ_PACKAGE_VERSION}")
-+if(OPENDAQ_PACKAGE_NAME_INCLUDE_TWEAK)
-+    string(APPEND _PACKING_VERSION ".0")
++string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+\\.([0-9]+)" _PACKING_TWEAK_MATCH "${package_version}")
++if(_PACKING_TWEAK_MATCH)
++    string(REGEX REPLACE "^[0-9]+\\.[0-9]+\\.[0-9]+\\.([0-9]+).*" "\\1" _PACKING_TWEAK "${package_version}")
++    string(APPEND _PACKING_VERSION ".${_PACKING_TWEAK}")
 +endif()
 +
 +# Assemble filename: opendaq-VERSION[-SHA]_OS_ARCH_COMPILER
++# Add SHA only for dev versions (version ends with "dev")
 +set(_PACKING_FILENAME "opendaq-${_PACKING_VERSION}")
-+if(OPENDAQ_PACKAGE_NAME_INCLUDE_SHA AND OPENDAQ_WC_REVISION_HASH)
++if(package_version MATCHES "dev$" AND OPENDAQ_WC_REVISION_HASH)
 +    string(SUBSTRING "${OPENDAQ_WC_REVISION_HASH}" 0 7 _PACKING_SHORT_SHA)
 +    string(APPEND _PACKING_FILENAME "-${_PACKING_SHORT_SHA}")
 +endif()
