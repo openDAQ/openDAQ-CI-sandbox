@@ -184,7 +184,7 @@ jobs:
           ARTIFACT_BASE="${ARTIFACT_BASE,,}"
 
           # Rename files to lowercase
-          for f in "$PACKAGE_PATH"/*.exe "$PACKAGE_PATH"/*.nupkg 2>/dev/null; do
+          for f in "$PACKAGE_PATH"/*.exe "$PACKAGE_PATH"/*.nupkg; do
             [ -f "$f" ] && mv "$f" "${f,,}"
           done
 

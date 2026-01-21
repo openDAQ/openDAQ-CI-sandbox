@@ -57,6 +57,11 @@ runs:
 
         read -ra versions <<< "$PYTHON_VERSIONS"
 
+        # Select highest Python version for running build_pip.py script
+        # (needs Python 3.9+ for str.removesuffix)
+        BUILD_PYTHON_VERSION=$(echo "$PYTHON_VERSIONS" | tr ' ' '\n' | sort -V | tail -1)
+        echo "Using Python $BUILD_PYTHON_VERSION for build_pip.py"
+
         # Platform-specific settings
         PYTHON_VENV_PATH="$BUILD_PATH/venv"
         if [[ "$RUNNER_OS" == "Windows" ]]; then
@@ -81,15 +86,16 @@ runs:
           # Build py_opendaq_daq target
           cmake --build "$BUILD_PATH" --config "$CMAKE_BUILD_TYPE" --target py_opendaq_daq
 
-          # Create venv
+          # Create venv with target Python version (for pybind11-stubgen to import the module)
           rm -rf "$PYTHON_VENV_PATH"
           ${PYTHON_CMD}${version} -m venv "$PYTHON_VENV_PATH"
           source "$PYTHON_VENV_ACTIVATE"
 
           pip install --quiet numpy pybind11-stubgen
 
-          # Build wheel (-r removes .pyd after packaging)
-          python bindings/python/package/build_pip.py -l "$BIN_PATH" -r
+          # Build wheel using highest Python version (-r removes .pyd after packaging)
+          # stubgen from venv is used via subprocess (needs target Python to import module)
+          ${PYTHON_CMD}${BUILD_PYTHON_VERSION} bindings/python/package/build_pip.py -l "$BIN_PATH" -r
 
           cp "$BUILD_PATH/pip/packages/"*.whl "$WHEELS_PATH/"
 
