@@ -40,11 +40,11 @@ runs:
     - name: Build wheels
       id: build-wheels
       shell: bash
-      env:
-        BUILD_PATH: ${{ inputs.build-path }}
-        CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
-        PYTHON_VERSIONS: ${{ inputs.python-versions }}
       run: |
+        BUILD_PATH="${{ inputs.build-path }}"
+        CMAKE_BUILD_TYPE="${{ inputs.cmake-build-type }}"
+        PYTHON_VERSIONS="${{ inputs.python-versions }}"
+
         WHEELS_PATH="$BUILD_PATH/wheels"
         mkdir -p "$WHEELS_PATH"
         WHEELS_PATH="$(cd "$WHEELS_PATH" && pwd)"

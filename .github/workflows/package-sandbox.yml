@@ -175,7 +175,7 @@ jobs:
           BUILD_PATH: ${{ steps.build-sdk.outputs.build-path }}
         run: |
           PACKAGE_PATH="$BUILD_PATH/_packages"
-          cpack -B "$PACKAGE_PATH" -C ${{ matrix.cmake-build-type }} -G ${{ matrix.cpack }}
+          cpack --config "$BUILD_PATH/CPackConfig.cmake" -B "$PACKAGE_PATH" -C ${{ matrix.cmake-build-type }} -G ${{ matrix.cpack }}
 
           # Find package file and extract base name
           PACKAGE_FILE=$(ls -1 "$PACKAGE_PATH"/*.exe 2>/dev/null | head -1)
