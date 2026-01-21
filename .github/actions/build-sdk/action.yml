@@ -34,8 +34,15 @@ inputs:
     description: 'CTest preset name'
     required: false
     default: ''
+  bindings-csharp-version-suffix:
+    description: 'Version suffix for C# bindings NuGet package (e.g., "ci" -> 1.0.0-beta-ci)'
+    required: false
+    default: 'ci'
 
 outputs:
+  build-path:
+    description: 'Path to build directory'
+    value: ${{ steps.cmake-config.outputs.build-path }}
   gtest-xml-path:
     description: 'Path to GTest XML reports directory'
     value: ${{ steps.test.outputs.gtest-xml-path }}
@@ -204,7 +211,7 @@ runs:
     - name: Build
       shell: bash
       env:
-        SHORT_SHA: ci # .NET bindings version suffix (e.g., 1.0.0-beta-ci)
+        SHORT_SHA: ${{ inputs.bindings-csharp-version-suffix }}
         CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
         CMAKE_BUILD_PATH: ${{ steps.cmake-config.outputs.build-path }}
       run: |
