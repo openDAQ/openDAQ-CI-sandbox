@@ -97,7 +97,7 @@ runs:
           # stubgen from venv is used via subprocess (needs target Python to import module)
           ${PYTHON_CMD}${BUILD_PYTHON_VERSION} bindings/python/package/build_pip.py -l "$BIN_PATH" -r
 
-          cp "$BUILD_PATH/pip/packages/"*.whl "$WHEELS_PATH/"
+          cp pip/packages/*.whl "$WHEELS_PATH/"
 
           deactivate
           rm -rf "$PYTHON_VENV_PATH"
