@@ -136,6 +136,13 @@ jobs:
 
       # TODO: End of sandbox-only steps
 
+      - name: Restore build cache
+        id: cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: build
+          key: build-${{ matrix.name }}
+
       - name: Build SDK
         id: build-sdk
         uses: ./.github/actions/build-sdk
@@ -147,26 +154,12 @@ jobs:
           cmake-build-type: ${{ matrix.cmake-build-type }}
           enable-32bit: ${{ matrix.enable-32bit == true }}
 
-      - name: Build Wheels
-        id: build-wheels
-        if: matrix.enable-32bit != true
-        uses: ./.github/actions/build-wheels
+      - name: Cache build directory
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
         with:
-          python-versions: ${{ env.python_versions }}
-          build-path: ${{ steps.build-sdk.outputs.build-path }}
-          cmake-build-type: ${{ matrix.cmake-build-type }}
-
-      - name: Set short_sha_dotnet
-        id: build_wheels
-        if: matrix.enable-32bit != true
-        shell: bash
-        run: |
-          # for .NET Bindings beta build
-          BRANCH="${{ github.base_ref || github.ref_name }}"
-          BRANCH="${BRANCH#refs/heads/}"
-          if [[ "$BRANCH" != release/* ]]; then
-            echo "short_sha_dotnet=${{ env.short_sha }}" >> $GITHUB_OUTPUT
-          fi
+          path: build
+          key: build-${{ matrix.name }}
 
       - name: Package
         id: package
@@ -189,7 +182,11 @@ jobs:
           done
 
           echo "artifact_base=$ARTIFACT_BASE" >> $GITHUB_OUTPUT
-          echo "package_path=$PACKAGE_PATH" >> $GITHUB_OUTPUT
+          if command -v cygpath &> /dev/null; then
+            echo "package_path=$(cygpath -w "$PACKAGE_PATH")" >> $GITHUB_OUTPUT
+          else
+            echo "package_path=$PACKAGE_PATH" >> $GITHUB_OUTPUT
+          fi
           echo "Artifact base name: $ARTIFACT_BASE"
 
       - name: Upload package
@@ -198,6 +195,27 @@ jobs:
           name: ${{ steps.package.outputs.artifact_base }}
           path: ${{ steps.package.outputs.package_path }}
           retention-days: 7
+
+      - name: Build Wheels
+        id: build-wheels
+        if: matrix.enable-32bit != true
+        uses: ./.github/actions/build-wheels
+        with:
+          python-versions: ${{ env.python_versions }}
+          build-path: ${{ steps.build-sdk.outputs.build-path }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+
+      - name: Set short_sha_dotnet
+        id: build_wheels
+        if: matrix.enable-32bit != true
+        shell: bash
+        run: |
+          # for .NET Bindings beta build
+          BRANCH="${{ github.base_ref || github.ref_name }}"
+          BRANCH="${BRANCH#refs/heads/}"
+          if [[ "$BRANCH" != release/* ]]; then
+            echo "short_sha_dotnet=${{ env.short_sha }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Upload Wheels
         if: matrix.enable-32bit != true
