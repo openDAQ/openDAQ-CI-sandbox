@@ -1,0 +1,62 @@
+name: Build C# Bindings
+description: Build .NET/C# bindings for openDAQ
+
+inputs:
+  build-path:
+    description: 'Path to build directory (must be already configured with CMake)'
+    required: true
+  cmake-build-type:
+    description: 'Build type (Release/Debug)'
+    required: false
+    default: 'Release'
+
+outputs:
+  nuget-path:
+    description: 'Path to built .NET bindings'
+    value: ${{ steps.build.outputs.nuget-path }}
+  short-sha-dotnet:
+    description: 'Short SHA for .NET bindings beta build (empty for release branches)'
+    value: ${{ steps.build.outputs.short-sha-dotnet }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build
+      id: build
+      shell: bash
+      env:
+        BUILD_PATH: ${{ inputs.build-path }}
+      run: |
+        # Convert Windows path to unix if needed
+        if command -v cygpath &> /dev/null; then
+          BUILD_PATH=$(cygpath -u "$BUILD_PATH")
+        fi
+
+        # Set short-sha-dotnet for beta builds (non-release branches)
+        # Uses $short_sha env variable from parent workflow
+        BRANCH="${{ github.base_ref || github.ref_name }}"
+        BRANCH="${BRANCH#refs/heads/}"
+        if [[ "$BRANCH" != release/* ]]; then
+          echo "short-sha-dotnet=$short_sha" >> $GITHUB_OUTPUT
+        fi
+
+        echo "::group::CMake Configure (enable C# bindings)"
+        cmake -B "$BUILD_PATH" -DOPENDAQ_GENERATE_CSHARP_BINDINGS=ON
+        echo "::endgroup::"
+
+        echo "::group::CMake Build DotNetBindings"
+        cmake --build "$BUILD_PATH" --config ${{ inputs.cmake-build-type }} --target DotNetBindings
+        echo "::endgroup::"
+
+        # Get generator platform from CMakeCache (x64, Win32) - may be empty for non-VS generators
+        CMAKE_GENERATOR_PLATFORM=$(grep "^CMAKE_GENERATOR_PLATFORM:" "$BUILD_PATH/CMakeCache.txt" | cut -d'=' -f2)
+        if [ -n "$CMAKE_GENERATOR_PLATFORM" ]; then
+          NUGET_PATH="$BUILD_PATH/bindings/CSharp/bin/$CMAKE_GENERATOR_PLATFORM/${{ inputs.cmake-build-type }}"
+        else
+          NUGET_PATH="$BUILD_PATH/bindings/CSharp/bin/${{ inputs.cmake-build-type }}"
+        fi
+        if command -v cygpath &> /dev/null; then
+          echo "nuget-path=$(cygpath -w "$NUGET_PATH")" >> $GITHUB_OUTPUT
+        else
+          echo "nuget-path=$NUGET_PATH" >> $GITHUB_OUTPUT
+        fi

@@ -38,6 +38,14 @@ inputs:
     description: 'Version suffix for C# bindings NuGet package (e.g., "ci" -> 1.0.0-beta-ci)'
     required: false
     default: 'ci'
+  generate-installer:
+    description: 'Generate installer package using CPack'
+    required: false
+    default: 'false'
+  cpack-generator:
+    description: 'CPack generator (NSIS, DEB, RPM, ZIP, TGZ). Required if generate-installer is true'
+    required: false
+    default: ''
 
 outputs:
   build-path:
@@ -46,6 +54,12 @@ outputs:
   gtest-xml-path:
     description: 'Path to GTest XML reports directory'
     value: ${{ steps.test.outputs.gtest-xml-path }}
+  package-name:
+    description: 'Installer artifact name (package filename without extension)'
+    value: ${{ steps.build-installer.outputs.package-name }}
+  package-path:
+    description: 'Full path to the installer file'
+    value: ${{ steps.build-installer.outputs.package-path }}
 
 runs:
   using: composite
@@ -263,3 +277,41 @@ runs:
         echo "::group::CTest"
         $SUDO_CMD ctest --test-dir "$CMAKE_BUILD_PATH" --output-on-failure $CTEST_ARGS
         echo "::endgroup::"
+
+    - name: Build Installer
+      id: build-installer
+      if: inputs.generate-installer == 'true'
+      shell: bash
+      env:
+        BUILD_PATH: ${{ steps.cmake-config.outputs.build-path }}
+      run: |
+        # Convert Windows path to unix if needed
+        if command -v cygpath &> /dev/null; then
+          BUILD_PATH=$(cygpath -u "$BUILD_PATH")
+        fi
+
+        PACKAGE_NAME=$(grep 'CPACK_PACKAGE_FILE_NAME' "$BUILD_PATH/CPackConfig.cmake" | cut -d'"' -f2)
+
+        case "${{ inputs.cpack-generator }}" in
+          NSIS) PACKAGE_EXT="exe" ;;
+          ZIP) PACKAGE_EXT="zip" ;;
+          TGZ) PACKAGE_EXT="tar.gz" ;;
+          DEB) PACKAGE_EXT="deb" ;;
+          RPM) PACKAGE_EXT="rpm" ;;
+          *) echo "Unknown generator: ${{ inputs.cpack-generator }}" && exit 1 ;;
+        esac
+
+        PACKAGE_PATH="$BUILD_PATH/_packages"
+
+        echo "::group::CPack"
+        cpack --config "$BUILD_PATH/CPackConfig.cmake" -B "$PACKAGE_PATH" -C ${{ inputs.cmake-build-type }} -G ${{ inputs.cpack-generator }}
+        echo "::endgroup::"
+
+        PACKAGE_FILE_PATH="$PACKAGE_PATH/$PACKAGE_NAME.$PACKAGE_EXT"
+
+        echo "package-name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+        if command -v cygpath &> /dev/null; then
+          echo "package-path=$(cygpath -w "$PACKAGE_FILE_PATH")" >> $GITHUB_OUTPUT
+        else
+          echo "package-path=$PACKAGE_FILE_PATH" >> $GITHUB_OUTPUT
+        fi

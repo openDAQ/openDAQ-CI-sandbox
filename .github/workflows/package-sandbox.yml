@@ -40,15 +40,13 @@ jobs:
           - name: Windows VS 2022 x64 Release
             runner: windows-latest
             cmake-generator: "Visual Studio 17 2022"
-            cmake-generator-platform: x64
             cmake-build-type: Release
             cmake-defines: >-
-              -DOPENDAQ_MSVC_SINGLE_PROCESS_BUILD=ON
+              -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF
+              -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
               -DOPENDAQ_ENABLE_TESTS=OFF
               -DOPENDAQ_ENABLE_TEST_UTILS=OFF
               -DOPENDAQ_BUILD_DOCUMENTATION=OFF
-              -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF
-              -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
               -DOPENDAQ_ENABLE_OPCUA=OFF
               -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
               -DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF
@@ -68,15 +66,13 @@ jobs:
           - name: Windows VS 2022 Win32 Release
             runner: windows-latest
             cmake-generator: "Visual Studio 17 2022"
-            cmake-generator-platform: Win32
             cmake-build-type: Release
             cmake-defines: >-
-              -DOPENDAQ_MSVC_SINGLE_PROCESS_BUILD=ON
+              -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF
+              -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
               -DOPENDAQ_ENABLE_TESTS=OFF
               -DOPENDAQ_ENABLE_TEST_UTILS=OFF
               -DOPENDAQ_BUILD_DOCUMENTATION=OFF
-              -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF
-              -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
               -DOPENDAQ_ENABLE_OPCUA=OFF
               -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
               -DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF
@@ -98,7 +94,7 @@ jobs:
       # test_path: ''
       windows_x64_artifact_name: ${{ env.windows_x64_artifact }}
       # short_sha: ${{ env.short_sha }}
-      short_sha_dotnet: ${{ steps.build-csharp-bindings.outputs.short_sha_dotnet }}
+      short_sha_dotnet: ${{ steps.build-csharp-bindings.outputs.short-sha-dotnet }}
 
     env:
       short_sha: 'package'  # for .NET Bindings build
@@ -161,6 +157,8 @@ jobs:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
           enable-32bit: ${{ matrix.enable-32bit == true }}
+          generate-installer: true
+          cpack-generator: ${{ matrix.cpack-generator }}
 
       - name: Cache build directory
         uses: actions/cache/save@v4
@@ -168,46 +166,17 @@ jobs:
           path: build
           key: build-${{ matrix.name }}
 
-      - name: Package
-        id: package
-        shell: bash
-        env:
-          BUILD_PATH: ${{ steps.build-sdk.outputs.build-path }}
-        run: |
-          ARTIFACT_NAME=$(grep 'CPACK_PACKAGE_FILE_NAME' "$BUILD_PATH/CPackConfig.cmake" | cut -d'"' -f2)
-
-          case "${{ matrix.cpack-generator }}" in
-            NSIS) ARTIFACT_EXT="exe" ;;
-            ZIP) ARTIFACT_EXT="zip" ;;
-            TGZ) ARTIFACT_EXT="tar.gz" ;;
-            DEB) ARTIFACT_EXT="deb" ;;
-            RPM) ARTIFACT_EXT="rpm" ;;
-            *) echo "Unknown generator: ${{ matrix.cpack-generator }}" && exit 1 ;;
-          esac
-
-          PACKAGE_PATH="$BUILD_PATH/_packages"
-          cpack --config "$BUILD_PATH/CPackConfig.cmake" -B "$PACKAGE_PATH" -C ${{ matrix.cmake-build-type }} -G ${{ matrix.cpack-generator }}
-
-          ARTIFACT_PATH="$PACKAGE_PATH/$ARTIFACT_NAME.$ARTIFACT_EXT"
-
-          echo "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
-          if command -v cygpath &> /dev/null; then
-            echo "artifact-path=$(cygpath -w "$ARTIFACT_PATH")" >> $GITHUB_OUTPUT
-          else
-            echo "artifact-path=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Upload package
+      - name: Upload SDK Installer
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.package.outputs.artifact-name }}
-          path: ${{ steps.package.outputs.artifact-path }}
+          name: ${{ matrix.name }}
+          path: ${{ steps.build-sdk.outputs.package-path }}
           retention-days: 7
 
       - name: Build Python Wheels
         id: build-python-bindings
         if: matrix.generate-python-bindings == true
-        uses: ./.github/actions/build-wheels
+        uses: ./.github/actions/build-bindings-python
         with:
           python-versions: ${{ env.python_versions }}
           build-path: ${{ steps.build-sdk.outputs.build-path }}
@@ -217,40 +186,24 @@ jobs:
         if: matrix.generate-python-bindings == true
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.package.outputs.artifact-name }}-wheels
+          name: ${{ matrix.name }}-wheels
           path: ${{ steps.build-python-bindings.outputs.wheels-path }}
           retention-days: 7
 
-      - name: Build .NET Bindings
+      - name: Build C# Bindings
         id: build-csharp-bindings
         if: matrix.generate-csharp-bindings == true
-        shell: bash
-        env:
-          BUILD_PATH: ${{ steps.build-sdk.outputs.build-path }}
-        run: |
-          # for .NET Bindings beta build
-          BRANCH="${{ github.base_ref || github.ref_name }}"
-          BRANCH="${BRANCH#refs/heads/}"
-          if [[ "$BRANCH" != release/* ]]; then
-            echo "short_sha_dotnet=${{ env.short_sha }}" >> $GITHUB_OUTPUT
-          fi
+        uses: ./.github/actions/build-bindings-csharp
+        with:
+          build-path: ${{ steps.build-sdk.outputs.build-path }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
 
-          cmake -B "$BUILD_PATH" -DOPENDAQ_GENERATE_CSHARP_BINDINGS=ON
-          cmake --build "$BUILD_PATH" --config ${{ matrix.cmake-build-type }} --target DotNetBindings
-
-          ARTIFACT_PATH="$BUILD_PATH/bindings/CSharp/bin/${{ matrix.cmake-generator-platform }}/${{ matrix.cmake-build-type }}"
-          if command -v cygpath &> /dev/null; then
-            echo "artifact-path=$(cygpath -w "$ARTIFACT_PATH")" >> $GITHUB_OUTPUT
-          else
-            echo "artifact-path=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Upload .NET Bindings
+      - name: Upload C# Bindings
         if: matrix.generate-csharp-bindings == true
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.windows_x64_artifact }}
           path: |
-            ${{ steps.build-csharp-bindings.outputs.artifact-path }}
-            !${{ steps.build-csharp-bindings.outputs.artifact-path }}/**/*.json
+            ${{ steps.build-csharp-bindings.outputs.nuget-path }}
+            !${{ steps.build-csharp-bindings.outputs.nuget-path }}/**/*.json
           retention-days: 1
