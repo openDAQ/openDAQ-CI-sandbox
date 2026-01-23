@@ -24,32 +24,35 @@ runs:
   using: composite
   steps:
     - name: Convert versions to newline format
-      id: versions
+      id: python-version-sort
       shell: bash
       run: |
         VERSIONS="${{ inputs.python-versions }}"
-        echo "newline-versions<<EOF" >> $GITHUB_OUTPUT
-        echo "$VERSIONS" | tr ' ' '\n' | grep -v '^$' >> $GITHUB_OUTPUT
+        echo "versions<<EOF" >> $GITHUB_OUTPUT
+        echo "$VERSIONS" | tr ' ' '\n' | grep -v '^$' | sort -V >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
     - name: Set up Python versions
+      id: python-setup
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ steps.versions.outputs.newline-versions }}
+        python-version: ${{ steps.python-version-sort.outputs.versions }}
 
     - name: Build wheels
       id: build-wheels
       shell: bash
+      env:
+        CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
+        CMAKE_BUILD_PATH: ${{ inputs.build-path }}
+        PYTHON_VERSION_BUILD: ${{ steps.python-setup.outputs.python-version }}
       run: |
-        BUILD_PATH="${{ inputs.build-path }}"
-        # Convert Windows path to unix if needed
         if command -v cygpath &> /dev/null; then
-          BUILD_PATH=$(cygpath -u "$BUILD_PATH")
+          CMAKE_BUILD_PATH=$(cygpath -u "$CMAKE_BUILD_PATH")
         fi
-        CMAKE_BUILD_TYPE="${{ inputs.cmake-build-type }}"
-        PYTHON_VERSIONS="${{ steps.versions.outputs.newline-versions }}"
 
-        WHEELS_PATH="$BUILD_PATH/wheels"
+        PYTHON_VERSIONS="${{ steps.python-version-sort.outputs.versions }}"
+
+        WHEELS_PATH="$CMAKE_BUILD_PATH/wheels"
         mkdir -p "$WHEELS_PATH"
         WHEELS_PATH="$(cd "$WHEELS_PATH" && pwd)"
 
@@ -59,26 +62,22 @@ runs:
           echo "wheels-path=$WHEELS_PATH" >> $GITHUB_OUTPUT
         fi
 
-        # Select highest Python version for running build_pip.py script
-        BUILD_PYTHON_VERSION=$(echo "$PYTHON_VERSIONS" | sort -V | tail -1)
-        echo "Using Python $BUILD_PYTHON_VERSION for build_pip.py"
-
         # Platform-specific settings
-        PYTHON_VENV_PATH="$BUILD_PATH/venv"
+        PYTHON_CMD="python"
+        PYTHON_VENV_PATH="$CMAKE_BUILD_PATH/venv"
+        PYTHON_VENV_ACTIVATE="$PYTHON_VENV_PATH/bin/activate"
+        PYTHON_VERSION_BUILD=$(echo "$PYTHON_VERSION_BUILD" | cut -d. -f1,2)
         if [[ "$RUNNER_OS" == "Windows" ]]; then
-          PYTHON_VENV_ACTIVATE="$PYTHON_VENV_PATH/Scripts/activate"
           PYTHON_CMD="py -"
-        else
-          PYTHON_VENV_ACTIVATE="$PYTHON_VENV_PATH/bin/activate"
-          PYTHON_CMD="python"
+          PYTHON_VENV_ACTIVATE="$PYTHON_VENV_PATH/Scripts/activate"
         fi
 
-        # Determine bin path based on generator type (multi-config vs single-config)
-        CMAKE_GENERATOR=$(grep "^CMAKE_GENERATOR:" "$BUILD_PATH/CMakeCache.txt" | cut -d'=' -f2)
+        # Determine bin path based on generator type
+        # (multi-config generators append build type to the binary output path)
+        CMAKE_GENERATOR=$(grep "^CMAKE_GENERATOR:" "$CMAKE_BUILD_PATH/CMakeCache.txt" | cut -d'=' -f2)
+        BIN_PATH="$CMAKE_BUILD_PATH/bin"
         if [[ "$CMAKE_GENERATOR" == "Visual Studio"* ]]; then
-          BIN_PATH="$BUILD_PATH/bin/$CMAKE_BUILD_TYPE"
-        else
-          BIN_PATH="$BUILD_PATH/bin"
+          BIN_PATH="$CMAKE_BUILD_PATH/bin/$CMAKE_BUILD_TYPE"
         fi
 
         CMAKE_BUILD_ARGS=""
@@ -86,16 +85,18 @@ runs:
           CMAKE_BUILD_ARGS="--config $CMAKE_BUILD_TYPE"
         fi
 
+        echo "Using Python $PYTHON_VERSION_BUILD for build_pip.py"
+
         while IFS= read -r version; do
           echo "::group::CMake Configure (Python $version)"
-          cmake -B "$BUILD_PATH" \
+          cmake -B "$CMAKE_BUILD_PATH" \
             -DOPENDAQ_GENERATE_PYTHON_BINDINGS=ON \
             -DOPENDAQ_PYTHON_VERSION="$version" \
             -DPYBIND11_FINDPYTHON=ON
           echo "::endgroup::"
 
           echo "::group::CMake Build (Python $version)"
-          cmake --build "$BUILD_PATH" $CMAKE_BUILD_ARGS --target py_opendaq_daq
+          cmake --build "$CMAKE_BUILD_PATH" $CMAKE_BUILD_ARGS --target py_opendaq_daq
           echo "::endgroup::"
 
           echo "::group::Build wheel (Python $version)"
@@ -105,9 +106,8 @@ runs:
 
           pip install --quiet numpy pybind11-stubgen
 
-          # Build wheel using highest Python version (-r removes .pyd after packaging)
-          # stubgen from venv is used via subprocess (needs target Python to import module)
-          ${PYTHON_CMD}${BUILD_PYTHON_VERSION} bindings/python/package/build_pip.py -l "$BIN_PATH" -r
+          # Build Python wheels (-r removes .pyd after packaging)
+          ${PYTHON_CMD}${PYTHON_VERSION_BUILD} bindings/python/package/build_pip.py -l "$BIN_PATH" -r
 
           cp pip/packages/*.whl "$WHEELS_PATH/"
 

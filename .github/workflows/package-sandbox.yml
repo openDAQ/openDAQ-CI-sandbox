@@ -140,13 +140,6 @@ jobs:
 
       # TODO: End of sandbox-only steps
 
-      - name: Restore build cache
-        id: cache-restore
-        uses: actions/cache/restore@v4
-        with:
-          path: build
-          key: build-${{ matrix.name }}
-
       - name: Build SDK
         id: build-sdk
         uses: ./.github/actions/build-sdk
@@ -157,14 +150,9 @@ jobs:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
           enable-32bit: ${{ matrix.enable-32bit == true }}
-          generate-installer: true
           cpack-generator: ${{ matrix.cpack-generator }}
-
-      - name: Cache build directory
-        uses: actions/cache/save@v4
-        with:
-          path: build
-          key: build-${{ matrix.name }}
+          generate-csharp-bindings: ${{ matrix.generate-csharp-bindings }}
+          generate-python-bindings: ${{ matrix.generate-csharp-bindings }}
 
       - name: Upload SDK Installer
         uses: actions/upload-artifact@v4
