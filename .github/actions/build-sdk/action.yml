@@ -50,6 +50,14 @@ inputs:
     description: 'Generate C# bindings (true/false/empty). Empty = use preset or cmake-config-args'
     required: false
     default: ''
+  generate-simulator-app:
+    description: 'Build simulator application (true/false/empty). Empty = use preset or cmake-config-args'
+    required: false
+    default: ''
+  generate-doxygen-doc:
+    description: 'Build Doxygen documentation (true/false/empty). Empty = use preset or cmake-config-args'
+    required: false
+    default: ''
 
 outputs:
   build-path:
@@ -142,7 +150,7 @@ runs:
 
     - name: Install ninja-build
       if: inputs.cmake-generator == 'Ninja'
-      uses: seanmiddleditch/gha-setup-ninja@v5
+      uses: seanmiddleditch/gha-setup-ninja@v6
 
     - name: Setup MSYS2 MINGW64
       if: runner.os == 'Windows' && env.CXX == 'g++'
@@ -238,6 +246,20 @@ runs:
           CMAKE_ARGS="$CMAKE_ARGS -DOPENDAQ_GENERATE_CSHARP_BINDINGS=ON"
         elif [ "${{ inputs.generate-csharp-bindings }}" == "false" ]; then
           CMAKE_ARGS="$CMAKE_ARGS -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF"
+        fi
+
+        # Simulator application
+        if [ "${{ inputs.generate-simulator-app }}" == "true" ]; then
+          CMAKE_ARGS="$CMAKE_ARGS -DDAQSIMULATOR_ENABLE_SIMULATOR_APP=ON"
+        elif [ "${{ inputs.generate-simulator-app }}" == "false" ]; then
+          CMAKE_ARGS="$CMAKE_ARGS -DDAQSIMULATOR_ENABLE_SIMULATOR_APP=OFF"
+        fi
+
+        # Doxygen documentation
+        if [ "${{ inputs.generate-doxygen-doc }}" == "true" ]; then
+          CMAKE_ARGS="$CMAKE_ARGS -DOPENDAQ_BUILD_DOCUMENTATION=ON"
+        elif [ "${{ inputs.generate-doxygen-doc }}" == "false" ]; then
+          CMAKE_ARGS="$CMAKE_ARGS -DOPENDAQ_BUILD_DOCUMENTATION=OFF"
         fi
 
         echo "::group::CMake Configure"
