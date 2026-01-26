@@ -157,7 +157,7 @@ jobs:
       - name: Upload SDK Installer
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}
+          name: Package (${{ matrix.name }})
           path: ${{ steps.build-sdk.outputs.package-path }}
           retention-days: 7
 
@@ -174,7 +174,7 @@ jobs:
         if: matrix.generate-python-bindings == true
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}-wheels
+          name: Wheels (${{ matrix.name }})
           path: ${{ steps.build-python-bindings.outputs.wheels-path }}
           retention-days: 7
 
@@ -195,3 +195,132 @@ jobs:
             ${{ steps.build-csharp-bindings.outputs.nuget-path }}
             !${{ steps.build-csharp-bindings.outputs.nuget-path }}/**/*.json
           retention-days: 1
+
+  build_macos:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.name }}
+      cancel-in-progress: true
+    timeout-minutes: 400
+    strategy:
+      fail-fast: false
+      matrix:
+        # include:
+        #   - name: macos-13 clang Release
+        #     cmake_generator: Ninja
+        #     cmake_build_type: Release
+        #     cmake_osx_deployment_target: 10.15
+        include:
+          - name: macOS 15 x86_64 Clang Release
+            runner: macos-15-intel
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+              -DOPENDAQ_ENABLE_TESTS=OFF
+              -DOPENDAQ_ENABLE_TEST_UTILS=OFF
+              -DOPENDAQ_BUILD_DOCUMENTATION=OFF
+              -DOPENDAQ_ENABLE_OPCUA=OFF
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+              -DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF
+              -DDAQSIMULATOR_ENABLE_SIMULATOR_APP=OFF
+              -DDAQMODULES_REF_FB_MODULE=OFF
+              -DDAQMODULES_REF_DEVICE_MODULE=OFF
+              -DDAQMODULES_AUDIO_DEVICE_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
+              -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
+            disable-ccache: false
+
+          - name: macOS Latest ARM64 Clang Release
+            runner: macos-latest
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+              -DOPENDAQ_ENABLE_TESTS=OFF
+              -DOPENDAQ_ENABLE_TEST_UTILS=OFF
+              -DOPENDAQ_BUILD_DOCUMENTATION=OFF
+              -DOPENDAQ_ENABLE_OPCUA=OFF
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+              -DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF
+              -DDAQSIMULATOR_ENABLE_SIMULATOR_APP=OFF
+              -DDAQMODULES_REF_FB_MODULE=OFF
+              -DDAQMODULES_REF_DEVICE_MODULE=OFF
+              -DDAQMODULES_AUDIO_DEVICE_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
+              -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
+            disable-ccache: false
+    env:
+      CC: clang
+      CXX: clang++
+
+    steps:
+      # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
+      - name: Checkout openDAQ
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: actions/checkout@v4
+        with:
+          repository: openDAQ/openDAQ
+
+      - name: Checkout CI actions
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: actions/checkout@v4
+        with:
+          path: _ci-sandbox
+
+      - name: Copy CI actions
+        if: github.repository != 'openDAQ/openDAQ'
+        shell: bash
+        run: cp -r _ci-sandbox/.github/actions .github/
+
+      - name: Apply patches
+        if: github.repository != 'openDAQ/openDAQ'
+        shell: bash
+        run: |
+          if [ ! -d "_ci-sandbox/.github/patches" ]; then
+            echo "No patches directory, nothing to apply"
+            exit 0
+          fi
+          for patch in _ci-sandbox/.github/patches/*.patch; do
+            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch" || true
+          done
+
+      - name: Setup ccache
+        if: ${{ matrix.disable-ccache != true }}
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
+        with:
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+
+      # TODO: End of sandbox-only steps
+
+      - name: Build SDK
+        id: build-sdk
+        uses: ./.github/actions/build-sdk
+        with:
+          additional-dependencies: nsis
+          cmake-generator: ${{ matrix.cmake-generator }}
+          cmake-config-preset: ${{ env.cmake_preset }}
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          generate-csharp-bindings: false
+          generate-python-bindings: false
+
+      - name: Build Python Wheels
+        id: build-python-bindings
+        uses: ./.github/actions/build-bindings-python
+        with:
+          python-versions: ${{ env.python_versions }}
+          build-path: ${{ steps.build-sdk.outputs.build-path }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+
+      - name: Upload Python Wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wheels (${{ matrix.name }})
+          path: ${{ steps.build-python-bindings.outputs.wheels-path }}
+          retention-days: 7
