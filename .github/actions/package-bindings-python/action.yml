@@ -1,4 +1,4 @@
-name: Build Python Wheels
+name: Package Python Bindings
 description: Build Python wheels for multiple Python versions (requires prior CMake configuration)
 
 inputs:
@@ -14,6 +14,14 @@ inputs:
     description: 'Build type (Release/Debug)'
     required: false
     default: 'Release'
+  package-artifact-name:
+    description: 'Artifact name for uploading wheels. If empty, no upload is performed'
+    required: false
+    default: ''
+  package-artifact-retention-days:
+    description: 'Number of days to retain the artifact'
+    required: false
+    default: '7'
 
 outputs:
   wheels-path:
@@ -44,7 +52,7 @@ runs:
       env:
         CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
         CMAKE_BUILD_PATH: ${{ inputs.build-path }}
-        PYTHON_VERSION_BUILD: ${{ steps.python-setup.outputs.python-version }}
+        PYTHON_VERSION_LATEST: ${{ steps.python-setup.outputs.python-version }}
       run: |
         if command -v cygpath &> /dev/null; then
           CMAKE_BUILD_PATH=$(cygpath -u "$CMAKE_BUILD_PATH")
@@ -66,7 +74,6 @@ runs:
         PYTHON_CMD="python"
         PYTHON_VENV_PATH="$CMAKE_BUILD_PATH/venv"
         PYTHON_VENV_ACTIVATE="$PYTHON_VENV_PATH/bin/activate"
-        PYTHON_VERSION_BUILD=$(echo "$PYTHON_VERSION_BUILD" | cut -d. -f1,2)
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           PYTHON_CMD="py -"
           PYTHON_VENV_ACTIVATE="$PYTHON_VENV_PATH/Scripts/activate"
@@ -85,7 +92,8 @@ runs:
           CMAKE_BUILD_ARGS="--config $CMAKE_BUILD_TYPE"
         fi
 
-        echo "Using Python $PYTHON_VERSION_BUILD for build_pip.py"
+        PYTHON_VERSION_LATEST=$(echo "$PYTHON_VERSION_LATEST" | cut -d. -f1,2)
+        echo "Using Python $PYTHON_VERSION_LATEST for build_pip.py"
 
         while IFS= read -r version; do
           echo "::group::CMake Configure (Python $version)"
@@ -107,7 +115,7 @@ runs:
           pip install --quiet numpy pybind11-stubgen
 
           # Build Python wheels (-r removes .pyd after packaging)
-          ${PYTHON_CMD}${PYTHON_VERSION_BUILD} bindings/python/package/build_pip.py -l "$BIN_PATH" -r
+          ${PYTHON_CMD}${PYTHON_VERSION_LATEST} bindings/python/package/build_pip.py -l "$BIN_PATH" -r
 
           cp pip/packages/*.whl "$WHEELS_PATH/"
 
@@ -118,3 +126,11 @@ runs:
 
         echo "Built wheels:"
         ls -la "$WHEELS_PATH/"
+
+    - name: Upload Python Wheels
+      if: inputs.package-artifact-name != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.package-artifact-name }}
+        path: ${{ steps.build-wheels.outputs.wheels-path }}
+        retention-days: ${{ inputs.package-artifact-retention-days }}
