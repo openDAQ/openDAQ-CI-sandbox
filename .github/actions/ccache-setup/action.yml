@@ -40,10 +40,17 @@ runs:
     - name: Install ccache
       shell: bash
       run: |
+        SUDO_CMD="sudo -E"
+        if ! command -v sudo &> /dev/null; then
+          SUDO_CMD=""
+        fi
+
         if ! command -v ccache &> /dev/null; then
           echo "Installing ccache..."
           if command -v apt-get &> /dev/null; then
-            sudo apt-get update && sudo apt-get install -y ccache
+            $SUDO_CMD apt-get update && $SUDO_CMD apt-get install -y ccache
+          elif command -v yum &> /dev/null; then
+            $SUDO_CMD yum install -y ccache
           elif command -v brew &> /dev/null; then
             HOMEBREW_NO_AUTO_UPDATE=1 brew install ccache
           elif command -v choco &> /dev/null; then
