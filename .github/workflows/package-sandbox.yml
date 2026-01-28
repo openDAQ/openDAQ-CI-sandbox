@@ -22,6 +22,7 @@ env:
   cmake_preset: package
   python_versions: 3.8 3.14
   windows_x64_artifact: SdkWindows64
+  linux_x64_artifact: SdkLinux64
   vm_name: device_simulator
   simulator_app_artifact: SimulatorApp
 
@@ -241,6 +242,10 @@ jobs:
             generate-simulator-app: false
             generate-doxygen-doc: false
             generate-csharp-bindings: false
+
+    outputs:
+      linux_x64_artifact_name: ${{ env.linux_x64_artifact }}
+
     env:
       CC: gcc
       CXX: g++
@@ -297,8 +302,6 @@ jobs:
           cpack-generator: DEB
           generate-csharp-bindings: false
           generate-python-bindings: false
-          generate-simulator-app: false
-          generate-doxygen-doc: false
 
       - name: Upload Package
         uses: actions/upload-artifact@v4
@@ -676,3 +679,85 @@ jobs:
         uses: geekyeggo/delete-artifact@v5
         with:
           name: ${{ env.simulator_app_artifact }}
+
+  dotnet_bindings:
+    runs-on: windows-latest
+    name: .NET Bindings NuGet
+    needs: [package_windows, package_linux]
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-nuget
+      cancel-in-progress: true
+    timeout-minutes: 15
+
+    env:
+      nuget_work_path: ./build/nuget_work
+      nuget_work_path_win_x64: ./build/nuget_work/win-x64
+      nuget_work_path_linux_x64: ./build/nuget_work/linux-x64
+      dotnet_source_path: ./bindings/dotnet/openDAQ.Net
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: openDAQ/openDAQ
+
+      - name: Download artifacts for Windows x64
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package_windows.outputs.windows_x64_artifact_name }}
+          path: ${{ env.nuget_work_path_win_x64 }}
+
+      - name: Download artifacts for Linux x64
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package_linux.outputs.linux_x64_artifact_name }}
+          path: ${{ env.nuget_work_path_linux_x64 }}
+
+      - name: Cleanup test files from Linux artifacts
+        working-directory: ${{ env.nuget_work_path_linux_x64 }}
+        run: |
+          if (Test-Path "*_test_dll.so") { del *_test_dll.so -Force }
+          if (Test-Path "opendaq.cpython*") { del opendaq.cpython* -Force }
+
+      - name: Display files
+        run: ls -R ${{ env.nuget_work_path }}
+
+      - name: Read openDAQ version
+        id: daq_version
+        shell: bash
+        run: |
+          DAQ_VER=$(cat opendaq_version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          echo "DAQ_VERSION=$DAQ_VER" >> "$GITHUB_OUTPUT"
+
+      - name: Build NuGet package
+        run: |
+          $ENV:REPOSITORY_URL = '${{ github.repositoryUrl }}'.Replace('git:','https:')
+          $ENV:BRANCH_NAME = '${{ github.base_ref || github.ref_name }}'.Replace('refs/heads/','')
+          $ENV:COMMIT_SHA = '${{ github.sha }}'
+          $ENV:SHORT_SHA = '${{ needs.package_windows.outputs.short_sha_dotnet }}'
+          $SDK_WIN64_PATH = "-p:SDK_WIN64_PATH=""$(Join-Path '${{ github.workspace }}' '${{ env.nuget_work_path_win_x64 }}' -Resolve)"""
+          $SDK_LINUX64_PATH = "-p:SDK_LINUX64_PATH=""$(Join-Path '${{ github.workspace }}' '${{ env.nuget_work_path_linux_x64 }}' -Resolve)"""
+          $DAQ_VERSION = '-p:OPENDAQ_PACKAGE_VERSION=${{ steps.daq_version.outputs.DAQ_VERSION }}'
+          if (Test-Path '${{ env.nuget_work_path_win_x64 }}/*.nupkg') { del '${{ env.nuget_work_path_win_x64 }}/*.nupkg' -Force }
+          cd '${{ env.dotnet_source_path }}/openDAQ.NET'
+          & dotnet restore . --ignore-failed-sources
+          & dotnet pack . --no-build --configuration Release $SDK_WIN64_PATH $SDK_LINUX64_PATH $DAQ_VERSION
+
+      - name: Upload NuGet package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Package (openDAQ.Net NuGet)
+          path: ${{ env.nuget_work_path }}/win-x64/openDAQ.Net.*.nupkg
+          retention-days: 7
+
+      - name: Delete source artifacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            ${{ needs.package_windows.outputs.windows_x64_artifact_name }}
+            ${{ needs.package_linux.outputs.linux_x64_artifact_name }}

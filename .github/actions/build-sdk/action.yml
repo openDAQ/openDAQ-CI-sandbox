@@ -182,7 +182,7 @@ runs:
 
     - name: Install ninja-build
       if: inputs.cmake-generator == 'Ninja' && inputs.skip-setup-ninja != 'true'
-      uses: seanmiddleditch/gha-setup-ninja@v5
+      uses: seanmiddleditch/gha-setup-ninja@v6
 
     - name: Setup MSYS2 MINGW64
       if: runner.os == 'Windows' && env.CXX == 'g++'
