@@ -85,9 +85,26 @@ runs:
           DISTRO="windows"
           VERSION="nt$(powershell -Command "[System.Environment]::OSVersion.Version.Major")"
         else
-          DISTRO=$(lsb_release -is | tr '[:upper:]' '[:lower:]')
-          VERSION=$(lsb_release -rs)
+          # Try lsb_release first, then fall back to /etc/os-release or /etc/redhat-release
+          if command -v lsb_release &> /dev/null; then
+            echo "Reading distro info from lsb_release"
+            DISTRO=$(lsb_release -is | tr '[:upper:]' '[:lower:]')
+            VERSION=$(lsb_release -rs)
+          elif [ -f /etc/os-release ]; then
+            echo "Reading distro info from /etc/os-release"
+            DISTRO=$(. /etc/os-release && echo "$ID")
+            VERSION=$(. /etc/os-release && echo "$VERSION_ID")
+          elif [ -f /etc/redhat-release ]; then
+            echo "Reading distro info from /etc/redhat-release"
+            DISTRO="rhel"
+            VERSION=$(grep -oE '[0-9]+\.[0-9]+' /etc/redhat-release | head -1)
+          else
+            echo "Could not detect distro, using fallback"
+            DISTRO="linux"
+            VERSION="unknown"
+          fi
         fi
+        echo "Detected: DISTRO=$DISTRO, VERSION=$VERSION"
         echo "distro=${DISTRO}-${VERSION}" >> "$GITHUB_OUTPUT"
 
         # Get architecture (e.g., x86-64, arm64, x86-32)
