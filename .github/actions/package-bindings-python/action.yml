@@ -57,8 +57,7 @@ runs:
       env:
         CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
         CMAKE_BUILD_PATH: ${{ inputs.build-path }}
-        PYTHON_VERSION_FROM_SETUP: ${{ steps.python-setup.outputs.python-version }}
-        SKIP_SETUP_PYTHON: ${{ inputs.skip-setup-python }}
+        PYTHON_VERSION_LATEST: ${{ steps.python-setup.outputs.python-version }}
       run: |
         if command -v cygpath &> /dev/null; then
           CMAKE_BUILD_PATH=$(cygpath -u "$CMAKE_BUILD_PATH")
@@ -99,17 +98,17 @@ runs:
         fi
 
         # Determine the latest Python version for build_pip.py
-        if [ "$SKIP_SETUP_PYTHON" == "true" ]; then
+        if [ -z "$PYTHON_VERSION_LATEST" ]; then
           # When setup-python is skipped, get latest version from sorted list
           PYTHON_VERSION_LATEST=$(echo "$PYTHON_VERSIONS" | tail -n1)
         else
-          PYTHON_VERSION_LATEST=$(echo "$PYTHON_VERSION_FROM_SETUP" | cut -d. -f1,2)
+          PYTHON_VERSION_LATEST=$(echo "$PYTHON_VERSION_LATEST" | cut -d. -f1,2)
         fi
         echo "Using Python $PYTHON_VERSION_LATEST for build_pip.py"
 
         while IFS= read -r version; do
           echo "::group::CMake Configure (Python $version)"
-          cmake -B "$CMAKE_BUILD_PATH" \
+          cmake -B "$CMAKE_BUILD_PATH" -G "$CMAKE_GENERATOR" \
             -DOPENDAQ_GENERATE_PYTHON_BINDINGS=ON \
             -DOPENDAQ_PYTHON_VERSION="$version" \
             -DPYBIND11_FINDPYTHON=ON

@@ -352,7 +352,7 @@ jobs:
         if: matrix.generate-csharp-bindings == true
         uses: actions/upload-artifact@v4
         with:
-          name: SdkLinux64
+          name: ${{ env.linux_x64_artifact }}
           path: |
             ${{ steps.build-sdk.outputs.build-path }}/bin/*.so
             !${{ steps.build-sdk.outputs.build-path }}/**/opendaq.cpython*
