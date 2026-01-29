@@ -197,7 +197,7 @@ jobs:
       matrix:
         include:
           - name: Linux x86_64 GCC Release
-            runner: ubuntu-22.04
+            runner: ubuntu-latest
             additional-dependencies: doxygen graphviz wget zip
             cmake-generator: Ninja
             cmake-build-type: Release
@@ -221,7 +221,7 @@ jobs:
             generate-csharp-bindings: true
 
           - name: Linux ARM64 GCC Release
-            runner: ubuntu-22.04-arm
+            runner: ubuntu-24.04-arm
             cmake-generator: Ninja
             cmake-build-type: Release
             cmake-defines: >-
