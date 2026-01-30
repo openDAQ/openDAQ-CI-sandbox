@@ -232,30 +232,44 @@ runs:
         # Create cache directory (required for actions/cache save step)
         mkdir -p "$CACHE_DIR_UNIX"
 
+        # Install NuGet package (required for CMake projects)
+        MSBUILD_CACHE_VERSION="0.1.312-preview"
+        NUGET_PKG_DIR="${{ github.workspace }}/.nuget-packages"
+        mkdir -p "$NUGET_PKG_DIR"
+        echo "Installing MSBuildCache NuGet package..."
+        nuget install Microsoft.MSBuildCache.Local -Version $MSBUILD_CACHE_VERSION -OutputDirectory "$NUGET_PKG_DIR" -NonInteractive
+
+        # Get the actual package path (nuget creates Package.Version folder)
+        MSBUILD_CACHE_PKG_PATH="$NUGET_PKG_DIR/Microsoft.MSBuildCache.Local.$MSBUILD_CACHE_VERSION"
+        if command -v cygpath &> /dev/null; then
+          MSBUILD_CACHE_PKG_PATH_WIN=$(cygpath -w "$MSBUILD_CACHE_PKG_PATH")
+        else
+          MSBUILD_CACHE_PKG_PATH_WIN="$MSBUILD_CACHE_PKG_PATH"
+        fi
+        echo "NuGet package installed at: $MSBUILD_CACHE_PKG_PATH_WIN"
+
         echo "Creating Directory.Build.props..."
-        cat > Directory.Build.props << EOF
-        <Project>
-          <PropertyGroup>
-            <MSBuildCacheLocalCacheRootPath>$CACHE_DIR_WIN</MSBuildCacheLocalCacheRootPath>
-            <MSBuildCacheLocalCacheSizeInMegabytes>$CACHE_SIZE</MSBuildCacheLocalCacheSizeInMegabytes>
-            <MSBuildCacheLogDirectory>\$(MSBuildCacheLocalCacheRootPath)\logs</MSBuildCacheLogDirectory>
-          </PropertyGroup>
-          <ItemGroup>
-            <PackageReference Include="Microsoft.MSBuildCache.Local" Version="0.1.312-preview" />
-          </ItemGroup>
-        </Project>
-        EOF
+        {
+          echo '<Project>'
+          echo '  <PropertyGroup>'
+          echo "    <MSBuildCacheLocalCacheRootPath>$CACHE_DIR_WIN</MSBuildCacheLocalCacheRootPath>"
+          echo "    <MSBuildCacheLocalCacheSizeInMegabytes>$CACHE_SIZE</MSBuildCacheLocalCacheSizeInMegabytes>"
+          echo '    <MSBuildCacheLogDirectory>$(MSBuildCacheLocalCacheRootPath)\logs</MSBuildCacheLogDirectory>'
+          echo '  </PropertyGroup>'
+          echo '</Project>'
+        } > Directory.Build.props
 
         echo "Creating Directory.Build.targets..."
-        cat > Directory.Build.targets << EOF
-        <Project>
-          <Import Project="\$(NuGetPackageRoot)microsoft.msbuildcache.local\0.1.312-preview\build\Microsoft.MSBuildCache.Local.targets" Condition="Exists('\$(NuGetPackageRoot)microsoft.msbuildcache.local\0.1.312-preview\build\Microsoft.MSBuildCache.Local.targets')" />
-        </Project>
-        EOF
+        {
+          echo '<Project>'
+          echo "  <Import Project=\"${MSBUILD_CACHE_PKG_PATH_WIN}\\build\\Microsoft.MSBuildCache.Local.targets\" />"
+          echo '</Project>'
+        } > Directory.Build.targets
 
         echo "MSBuildCache configured:"
         echo "  Cache directory: $CACHE_DIR_WIN"
         echo "  Cache size: $CACHE_SIZE MB"
+        echo "  Package path: $MSBUILD_CACHE_PKG_PATH_WIN"
 
         # Use -switch instead of /switch to avoid Git Bash path conversion
         echo "msbuild-args=-graph -m -reportfileaccesses" >> "$GITHUB_OUTPUT"
