@@ -1,0 +1,147 @@
+name: 'Git Apply'
+description: 'Apply git patches'
+
+outputs:
+  patches:
+    description: 'Found patches (newline-separated)'
+    value: ${{ steps.collect.outputs.patches }}
+  applied:
+    description: 'Applied patches (newline-separated)'
+    value: ${{ steps.apply.outputs.applied }}
+  failed:
+    description: 'Failed patches (newline-separated)'
+    value: ${{ steps.apply.outputs.failed }}
+  skipped:
+    description: 'Skipped patches (newline-separated, when stopped on failure)'
+    value: ${{ steps.apply.outputs.skipped }}
+
+inputs:
+  project-dir:
+    description: 'Directory to apply patches in'
+    required: false
+    default: '.'
+  patches:
+    description: 'Patch paths (newline-separated, supports wildcards)'
+    required: true
+  continue-on-error:
+    description: 'Continue applying patches after failure instead of stopping'
+    required: false
+    default: 'false'
+  summary-name:
+    description: 'Summary name (if set, writes to job summary)'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Collect patches
+      id: collect
+      shell: bash
+      run: |
+        patches=()
+        while IFS= read -r pattern; do
+          [ -z "$pattern" ] && continue
+          for patch in $pattern; do
+            [ -f "$patch" ] && patches+=("$patch")
+          done
+        done <<< "${{ inputs.patches }}"
+
+        echo "Found ${#patches[@]} patches:"
+        printf '  %s\n' "${patches[@]}"
+
+        {
+          echo "patches<<EOF"
+          printf '%s\n' "${patches[@]}"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Apply patches
+      id: apply
+      if: steps.collect.outputs.patches != ''
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      run: |
+        skip_failed=${{ inputs.continue-on-error == 'true' && 1 || 0 }}
+
+        # Read patches into array
+        patches=()
+        while IFS= read -r p; do
+          [ -n "$p" ] && patches+=("$p")
+        done <<< "${{ steps.collect.outputs.patches }}"
+
+        applied=()
+        failed=()
+        skipped=()
+        error_code=0
+
+        for i in "${!patches[@]}"; do
+          patch="${patches[$i]}"
+          if git apply --check "$patch" 2>/dev/null; then
+            git apply "$patch"
+            echo "Applied: $patch"
+            applied+=("$patch")
+          else
+            failed+=("$patch")
+            if (( skip_failed )); then
+              echo "::warning::Failed to apply: $patch"
+            else
+              echo "::error::Failed to apply: $patch"
+              # Add remaining patches to skipped
+              for (( j=i+1; j<${#patches[@]}; j++ )); do
+                skipped+=("${patches[$j]}")
+              done
+              error_code=1
+              break
+            fi
+          fi
+        done
+
+        {
+          echo "applied<<EOF"
+          printf '%s\n' "${applied[@]}"
+          echo "EOF"
+          echo "failed<<EOF"
+          printf '%s\n' "${failed[@]}"
+          echo "EOF"
+          echo "skipped<<EOF"
+          printf '%s\n' "${skipped[@]}"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        exit $error_code
+
+    - name: Write summary
+      if: always() && inputs.summary-name != ''
+      shell: bash
+      run: |
+        {
+          echo "## Patches (${{ inputs.summary-name }})"
+          echo "**Directory:** \`${{ inputs.project-dir }}\`"
+          echo "**Patterns:**"
+          echo "${{ inputs.patches }}" | while IFS= read -r p; do
+            [ -n "$p" ] && echo "- \`$p\`"
+          done
+          echo ""
+          applied="${{ steps.apply.outputs.applied }}"
+          failed="${{ steps.apply.outputs.failed }}"
+          skipped="${{ steps.apply.outputs.skipped }}"
+          if [ -n "$applied" ]; then
+            echo "### ✅ Applied"
+            echo "$applied" | while IFS= read -r p; do
+              [ -n "$p" ] && echo "- \`$p\`"
+            done
+          fi
+          if [ -n "$failed" ]; then
+            echo "### ❌ Failed"
+            echo "$failed" | while IFS= read -r p; do
+              [ -n "$p" ] && echo "- \`$p\`"
+            done
+          fi
+          if [ -n "$skipped" ]; then
+            echo "### ⏭️ Skipped"
+            echo "$skipped" | while IFS= read -r p; do
+              [ -n "$p" ] && echo "- \`$p\`"
+            done
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
