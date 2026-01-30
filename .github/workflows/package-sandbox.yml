@@ -121,17 +121,12 @@ jobs:
         shell: bash
         run: cp -r _ci-sandbox/.github/actions .github/
 
-      - name: Apply patches
+      - name: Apply Patches
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         if: github.repository != 'openDAQ/openDAQ'
-        shell: bash
-        run: |
-          if [ ! -d "_ci-sandbox/.github/patches" ]; then
-            echo "No patches directory, nothing to apply"
-            exit 0
-          fi
-          for patch in _ci-sandbox/.github/patches/*.patch; do
-            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch" || true
-          done
+        with:
+          patches: |
+            _ci-sandbox/.github/patches/*.patch
 
       - name: Setup ccache
         if: ${{ matrix.disable-ccache != true }}
@@ -269,17 +264,12 @@ jobs:
         shell: bash
         run: cp -r _ci-sandbox/.github/actions .github/
 
-      - name: Apply patches
+      - name: Apply Patches
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         if: github.repository != 'openDAQ/openDAQ'
-        shell: bash
-        run: |
-          if [ ! -d "_ci-sandbox/.github/patches" ]; then
-            echo "No patches directory, nothing to apply"
-            exit 0
-          fi
-          for patch in _ci-sandbox/.github/patches/*.patch; do
-            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch" || true
-          done
+        with:
+          patches: |
+            _ci-sandbox/.github/patches/*.patch
 
       - name: Setup ccache
         if: ${{ matrix.disable-ccache != true }}
@@ -439,17 +429,12 @@ jobs:
         shell: bash
         run: cp -r _ci-sandbox/.github/actions .github/
 
-      - name: Apply patches
+      - name: Apply Patches
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         if: github.repository != 'openDAQ/openDAQ'
-        shell: bash
-        run: |
-          if [ ! -d "_ci-sandbox/.github/patches" ]; then
-            echo "No patches directory, nothing to apply"
-            exit 0
-          fi
-          for patch in _ci-sandbox/.github/patches/*.patch; do
-            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch" || true
-          done
+        with:
+          patches: |
+            _ci-sandbox/.github/patches/*.patch
 
       - name: Setup ccache
         if: ${{ matrix.disable-ccache != true }}
@@ -544,17 +529,12 @@ jobs:
         shell: bash
         run: cp -r _ci-sandbox/.github/actions .github/
 
-      - name: Apply patches
+      - name: Apply Patches
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         if: github.repository != 'openDAQ/openDAQ'
-        shell: bash
-        run: |
-          if [ ! -d "_ci-sandbox/.github/patches" ]; then
-            echo "No patches directory, nothing to apply"
-            exit 0
-          fi
-          for patch in _ci-sandbox/.github/patches/*.patch; do
-            [ -f "$patch" ] && git apply "$patch" && echo "Applied: $patch" || true
-          done
+        with:
+          patches: |
+            _ci-sandbox/.github/patches/*.patch
 
       - name: Setup ccache
         if: ${{ matrix.disable-ccache != true }}
