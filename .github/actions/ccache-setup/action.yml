@@ -1,7 +1,11 @@
-name: Setup ccache
-description: Configure ccache for faster builds with caching
+name: Setup build cache
+description: Configure ccache or MSBuildCache for faster builds
 
 inputs:
+  use-msbuild-cache:
+    description: 'Use MSBuildCache instead of ccache (Windows + VS 17.9+, experimental)'
+    required: false
+    default: 'false'
   cmake-config-args:
     description: 'CMake configure arguments (used to extract compiler for cache key)'
     required: false
@@ -18,6 +22,10 @@ inputs:
     description: 'Prefix for cache key (e.g., opendaq, test). If not set, no prefix is used.'
     required: false
     default: ''
+  cache-size:
+    description: 'Cache size (e.g., 2G for ccache, 2048 for msbuild-cache in MB)'
+    required: false
+    default: ''
   download-only:
     description: 'If true, only download cache (no auto-save). Use when manually saving cache later with actions/cache/save.'
     required: false
@@ -26,58 +34,48 @@ inputs:
 outputs:
   cache-hit:
     description: 'Whether cache was restored'
-    value: ${{ steps.cache.outputs.cache-hit || steps.cache-download.outputs.cache-hit }}
+    value: ${{ steps.cache.outputs.cache-hit || steps.cache-download.outputs.cache-hit || steps.msbuild-cache.outputs.cache-hit || steps.msbuild-cache-download.outputs.cache-hit }}
   cache-key:
     description: 'The cache key used'
-    value: ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-${{ steps.ccache-key.outputs.short-sha }}
+    value: ${{ steps.cache-key.outputs.cache-key }}
   cache-dir:
-    description: 'Path to ccache directory'
-    value: ${{ steps.ccache-key.outputs.dir }}
+    description: 'Path to cache directory'
+    value: ${{ steps.cache-key.outputs.dir }}
+  msbuild-args:
+    description: 'MSBuild arguments for cache support (only when use-msbuild-cache is true)'
+    value: ${{ steps.msbuild-cache-setup.outputs.msbuild-args }}
 
 runs:
   using: composite
   steps:
-    - name: Install ccache
-      shell: bash
-      run: |
-        SUDO_CMD="sudo -E"
-        if ! command -v sudo &> /dev/null; then
-          SUDO_CMD=""
-        fi
-
-        if ! command -v ccache &> /dev/null; then
-          echo "Installing ccache..."
-          if command -v apt-get &> /dev/null; then
-            $SUDO_CMD apt-get update && $SUDO_CMD apt-get install -y ccache
-          elif command -v yum &> /dev/null; then
-            $SUDO_CMD yum install -y ccache
-          elif command -v brew &> /dev/null; then
-            HOMEBREW_NO_AUTO_UPDATE=1 brew install ccache
-          elif command -v choco &> /dev/null; then
-            choco install ccache -y --no-progress
-          else
-            echo "::error::✗ Cannot install ccache: no supported package manager found"
-            exit 1
-          fi
-        fi
-        echo "ccache version: $(ccache --version | head -1)"
-
-    - name: Calculate ccache key
-      id: ccache-key
+    - name: Calculate cache key
+      id: cache-key
       shell: bash
       env:
         CMAKE_CONFIG_ARGS: ${{ inputs.cmake-config-args }}
         CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
+        USE_MSBUILD_CACHE: ${{ inputs.use-msbuild-cache }}
       run: |
-        CCACHE_DIR="${{ github.workspace }}/.ccache"
-        # Convert to Windows path if on Windows (native ccache doesn't understand Unix paths)
-        if command -v cygpath &> /dev/null; then
-          CCACHE_DIR=$(cygpath -w "$CCACHE_DIR")
+        # Determine cache type and directory
+        if [ "$USE_MSBUILD_CACHE" == "true" ]; then
+          CACHE_TYPE="msbuild"
+          CACHE_DIR="${{ github.workspace }}/.msbuildcache"
+        else
+          CACHE_TYPE="ccache"
+          CACHE_DIR="${{ github.workspace }}/.ccache"
         fi
-        echo "dir=$CCACHE_DIR" >> "$GITHUB_OUTPUT"
-        echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
 
-        # Get OS and version (e.g., ubuntu-22.04, macos-14.0, windows-2022)
+        # Store Unix path for bash operations
+        echo "dir-unix=$CACHE_DIR" >> "$GITHUB_OUTPUT"
+
+        # Convert to Windows path if on Windows (for cache action and MSBuild)
+        if command -v cygpath &> /dev/null; then
+          CACHE_DIR=$(cygpath -w "$CACHE_DIR")
+        fi
+        echo "type=$CACHE_TYPE" >> "$GITHUB_OUTPUT"
+        echo "dir=$CACHE_DIR" >> "$GITHUB_OUTPUT"
+
+        # Get OS and version
         if [[ "$OSTYPE" == "darwin"* ]]; then
           DISTRO="macos"
           VERSION=$(sw_vers -productVersion | cut -d. -f1,2)
@@ -85,34 +83,26 @@ runs:
           DISTRO="windows"
           VERSION="nt$(powershell -Command "[System.Environment]::OSVersion.Version.Major")"
         else
-          # Try lsb_release first, then fall back to /etc/os-release or /etc/redhat-release
           if command -v lsb_release &> /dev/null; then
-            echo "Reading distro info from lsb_release"
             DISTRO=$(lsb_release -is | tr '[:upper:]' '[:lower:]')
             VERSION=$(lsb_release -rs)
           elif [ -f /etc/os-release ]; then
-            echo "Reading distro info from /etc/os-release"
             DISTRO=$(. /etc/os-release && echo "$ID")
             VERSION=$(. /etc/os-release && echo "$VERSION_ID")
           elif [ -f /etc/redhat-release ]; then
-            echo "Reading distro info from /etc/redhat-release"
             DISTRO="rhel"
             VERSION=$(grep -oE '[0-9]+\.[0-9]+' /etc/redhat-release | head -1)
           else
-            echo "Could not detect distro, using fallback"
             DISTRO="linux"
             VERSION="unknown"
           fi
         fi
-        echo "Detected: DISTRO=$DISTRO, VERSION=$VERSION"
         echo "distro=${DISTRO}-${VERSION}" >> "$GITHUB_OUTPUT"
 
-        # Get architecture (e.g., x86-64, arm64, x86-32)
-        # Priority: 1) target-arch input, 2) -A flag from cmake args, 3) detect from host
+        # Get architecture
         if [ -n "${{ inputs.target-arch }}" ]; then
           ARCH="${{ inputs.target-arch }}"
         else
-          # Try to extract from CMake -A flag (e.g., -A Win32, -A x64, -A ARM64)
           CMAKE_ARCH=$(echo "$CMAKE_CONFIG_ARGS" | grep -oE '\-A\s*(Win32|x64|ARM64|ARM)' | awk '{print $2}' || true)
           if [ -n "$CMAKE_ARCH" ]; then
             case "$CMAKE_ARCH" in
@@ -133,10 +123,8 @@ runs:
         fi
         echo "arch=$ARCH" >> "$GITHUB_OUTPUT"
 
-        # Extract compiler from cmake-config-args (e.g., gcc-12, clang-14)
-        # Using sed instead of grep -P for cross-platform compatibility (Windows Git Bash lacks Perl regex)
+        # Extract compiler
         COMPILER=$(echo "$CMAKE_CONFIG_ARGS" | sed -n 's/.*-DCMAKE_CXX_COMPILER=\([^ ]*\).*/\1/p')
-        # Fallback to CXX environment variable if not found in cmake args
         if [ -z "$COMPILER" ] && [ -n "$CXX" ]; then
           COMPILER=$(basename "$CXX")
         fi
@@ -145,7 +133,7 @@ runs:
         fi
         echo "compiler=$COMPILER" >> "$GITHUB_OUTPUT"
 
-        # Build type in lowercase (e.g., release, debug)
+        # Build type
         BUILD_TYPE=$(echo "$CMAKE_BUILD_TYPE" | tr '[:upper:]' '[:lower:]')
         echo "build-type=$BUILD_TYPE" >> "$GITHUB_OUTPUT"
 
@@ -153,38 +141,141 @@ runs:
         SHORT_SHA=$(echo "${{ github.sha }}" | head -c 7)
         echo "short-sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
 
-        # Cache key prefix (e.g., opendaq, test)
+        # Cache key prefix
         PREFIX="${{ inputs.cache-key-prefix }}"
         if [ -n "$PREFIX" ]; then
-          echo "prefix=${PREFIX}-" >> "$GITHUB_OUTPUT"
-        else
-          echo "prefix=" >> "$GITHUB_OUTPUT"
+          PREFIX="${PREFIX}-"
+        fi
+        echo "prefix=$PREFIX" >> "$GITHUB_OUTPUT"
+
+        # Full cache key (distro already contains version)
+        DISTRO_VER="${DISTRO}-${VERSION}"
+        CACHE_KEY="${CACHE_TYPE}-${PREFIX}${DISTRO_VER}-${ARCH}-${COMPILER}-${BUILD_TYPE}-${SHORT_SHA}"
+        echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
+
+    # ============ ccache steps ============
+    - name: Install ccache
+      if: inputs.use-msbuild-cache != 'true'
+      shell: bash
+      run: |
+        SUDO_CMD="sudo -E"
+        if ! command -v sudo &> /dev/null; then
+          SUDO_CMD=""
         fi
 
+        if ! command -v ccache &> /dev/null; then
+          echo "Installing ccache..."
+          if command -v apt-get &> /dev/null; then
+            $SUDO_CMD apt-get update && $SUDO_CMD apt-get install -y ccache
+          elif command -v yum &> /dev/null; then
+            $SUDO_CMD yum install -y ccache
+          elif command -v brew &> /dev/null; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install ccache
+          elif command -v choco &> /dev/null; then
+            choco install ccache -y --no-progress
+          else
+            echo "::error::Cannot install ccache: no supported package manager found"
+            exit 1
+          fi
+        fi
+        echo "ccache version: $(ccache --version | head -1)"
+
     - name: Restore ccache (with auto-save)
-      if: inputs.download-only != 'true'
+      if: inputs.use-msbuild-cache != 'true' && inputs.download-only != 'true'
       id: cache
       uses: actions/cache@v4
       with:
-        path: ${{ steps.ccache-key.outputs.dir }}
-        key: ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-${{ steps.ccache-key.outputs.short-sha }}
+        path: ${{ steps.cache-key.outputs.dir }}
+        key: ${{ steps.cache-key.outputs.cache-key }}
         restore-keys: |
-          ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-
+          ccache-${{ steps.cache-key.outputs.prefix }}${{ steps.cache-key.outputs.distro }}-${{ steps.cache-key.outputs.arch }}-${{ steps.cache-key.outputs.compiler }}-${{ steps.cache-key.outputs.build-type }}-
 
     - name: Restore ccache (download only)
-      if: inputs.download-only == 'true'
+      if: inputs.use-msbuild-cache != 'true' && inputs.download-only == 'true'
       id: cache-download
       uses: actions/cache/restore@v4
       with:
-        path: ${{ steps.ccache-key.outputs.dir }}
-        key: ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-${{ steps.ccache-key.outputs.short-sha }}
+        path: ${{ steps.cache-key.outputs.dir }}
+        key: ${{ steps.cache-key.outputs.cache-key }}
         restore-keys: |
-          ccache-${{ steps.ccache-key.outputs.prefix }}${{ steps.ccache-key.outputs.distro }}-${{ steps.ccache-key.outputs.arch }}-${{ steps.ccache-key.outputs.compiler }}-${{ steps.ccache-key.outputs.build-type }}-
+          ccache-${{ steps.cache-key.outputs.prefix }}${{ steps.cache-key.outputs.distro }}-${{ steps.cache-key.outputs.arch }}-${{ steps.cache-key.outputs.compiler }}-${{ steps.cache-key.outputs.build-type }}-
 
     - name: Configure ccache
+      if: inputs.use-msbuild-cache != 'true'
       shell: bash
       run: |
-        ccache --set-config=cache_dir="$CCACHE_DIR"
-        ccache --set-config=max_size=2G
+        CACHE_DIR="${{ steps.cache-key.outputs.dir }}"
+        CACHE_SIZE="${{ inputs.cache-size }}"
+        if [ -z "$CACHE_SIZE" ]; then
+          CACHE_SIZE="2G"
+        fi
+
+        echo "CCACHE_DIR=$CACHE_DIR" >> "$GITHUB_ENV"
+        ccache --set-config=cache_dir="$CACHE_DIR"
+        ccache --set-config=max_size="$CACHE_SIZE"
         ccache --set-config=compression=true
         ccache -z  # Zero statistics
+
+    # ============ MSBuildCache steps ============
+    - name: Setup MSBuildCache
+      if: inputs.use-msbuild-cache == 'true'
+      id: msbuild-cache-setup
+      shell: bash
+      run: |
+        CACHE_DIR_UNIX="${{ steps.cache-key.outputs.dir-unix }}"
+        CACHE_DIR_WIN="${{ steps.cache-key.outputs.dir }}"
+        CACHE_SIZE="${{ inputs.cache-size }}"
+        if [ -z "$CACHE_SIZE" ]; then
+          CACHE_SIZE="2048"
+        fi
+
+        # Create cache directory (required for actions/cache save step)
+        mkdir -p "$CACHE_DIR_UNIX"
+
+        echo "Creating Directory.Build.props..."
+        cat > Directory.Build.props << EOF
+        <Project>
+          <PropertyGroup>
+            <MSBuildCacheLocalCacheRootPath>$CACHE_DIR_WIN</MSBuildCacheLocalCacheRootPath>
+            <MSBuildCacheLocalCacheSizeInMegabytes>$CACHE_SIZE</MSBuildCacheLocalCacheSizeInMegabytes>
+            <MSBuildCacheLogDirectory>\$(MSBuildCacheLocalCacheRootPath)\logs</MSBuildCacheLogDirectory>
+          </PropertyGroup>
+          <ItemGroup>
+            <PackageReference Include="Microsoft.MSBuildCache.Local" Version="0.1.312-preview" />
+          </ItemGroup>
+        </Project>
+        EOF
+
+        echo "Creating Directory.Build.targets..."
+        cat > Directory.Build.targets << EOF
+        <Project>
+          <Import Project="\$(NuGetPackageRoot)microsoft.msbuildcache.local\0.1.312-preview\build\Microsoft.MSBuildCache.Local.targets" Condition="Exists('\$(NuGetPackageRoot)microsoft.msbuildcache.local\0.1.312-preview\build\Microsoft.MSBuildCache.Local.targets')" />
+        </Project>
+        EOF
+
+        echo "MSBuildCache configured:"
+        echo "  Cache directory: $CACHE_DIR_WIN"
+        echo "  Cache size: $CACHE_SIZE MB"
+
+        # Use -switch instead of /switch to avoid Git Bash path conversion
+        echo "msbuild-args=-graph -m -reportfileaccesses" >> "$GITHUB_OUTPUT"
+
+    - name: Restore MSBuildCache (with auto-save)
+      if: inputs.use-msbuild-cache == 'true' && inputs.download-only != 'true'
+      id: msbuild-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.cache-key.outputs.dir }}
+        key: ${{ steps.cache-key.outputs.cache-key }}
+        restore-keys: |
+          msbuild-${{ steps.cache-key.outputs.prefix }}${{ steps.cache-key.outputs.distro }}-${{ steps.cache-key.outputs.arch }}-${{ steps.cache-key.outputs.compiler }}-${{ steps.cache-key.outputs.build-type }}-
+
+    - name: Restore MSBuildCache (download only)
+      if: inputs.use-msbuild-cache == 'true' && inputs.download-only == 'true'
+      id: msbuild-cache-download
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.cache-key.outputs.dir }}
+        key: ${{ steps.cache-key.outputs.cache-key }}
+        restore-keys: |
+          msbuild-${{ steps.cache-key.outputs.prefix }}${{ steps.cache-key.outputs.distro }}-${{ steps.cache-key.outputs.arch }}-${{ steps.cache-key.outputs.compiler }}-${{ steps.cache-key.outputs.build-type }}-
