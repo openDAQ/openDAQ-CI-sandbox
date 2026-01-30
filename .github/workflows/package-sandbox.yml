@@ -61,7 +61,6 @@ jobs:
               -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
               -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
             cpack-generator: NSIS
-            disable-ccache: true
             enable-32bit: false
             generate-python-bindings: true
             generate-csharp-bindings: true
@@ -87,7 +86,6 @@ jobs:
               -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
               -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
             cpack-generator: NSIS
-            disable-ccache: true
             enable-32bit: true
             generate-python-bindings: false
             generate-csharp-bindings: false
@@ -117,9 +115,10 @@ jobs:
           patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
 
       - name: Setup ccache
-        if: matrix.disable-ccache != true
-        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
+        id: ccache-setup
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/setup-ccache-ms-build-cache
         with:
+          use-msbuild-cache: true
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
           target-arch: ${{ matrix.enable-32bit == true && 'x86-32' || '' }}
@@ -133,6 +132,7 @@ jobs:
           cmake-config-preset: ${{ env.cmake_preset }}
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
+          cmake-build-args: ${{ steps.ccache-setup.outputs.msbuild-args }}
           enable-32bit: ${{ matrix.enable-32bit == true }}
           cpack-generator: ${{ matrix.cpack-generator }}
           generate-csharp-bindings: false

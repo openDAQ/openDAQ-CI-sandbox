@@ -30,6 +30,10 @@ inputs:
     description: 'Build configuration (Release, Debug). Required for multi-config generators (Visual Studio)'
     required: false
     default: ''
+  cmake-build-args:
+    description: 'Additional CMake build arguments (passed after --)'
+    required: false
+    default: ''
   enable-32bit:
     description: 'Build for 32-bit architecture'
     required: false
@@ -293,10 +297,15 @@ runs:
         SHORT_SHA: ${{ inputs.bindings-csharp-version-suffix }}
         CMAKE_BUILD_TYPE: ${{ inputs.cmake-build-type }}
         CMAKE_BUILD_PATH: ${{ steps.cmake-config.outputs.build-path }}
+        CMAKE_BUILD_ARGS_EXTRA: ${{ inputs.cmake-build-args }}
       run: |
         CMAKE_BUILD_ARGS=""
         if [ -n "$CMAKE_BUILD_TYPE" ]; then
           CMAKE_BUILD_ARGS="--config $CMAKE_BUILD_TYPE"
+        fi
+
+        if [ -n "$CMAKE_BUILD_ARGS_EXTRA" ]; then
+          CMAKE_BUILD_ARGS="$CMAKE_BUILD_ARGS -- $CMAKE_BUILD_ARGS_EXTRA"
         fi
 
         echo "::group::CMake Build"
