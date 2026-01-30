@@ -103,40 +103,26 @@ jobs:
       short_sha: 'package'  # for .NET Bindings build
 
     steps:
-      # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
-      - name: Checkout openDAQ
+      - name: Checkout
+        id: checkout
         if: github.repository != 'openDAQ/openDAQ'
-        uses: actions/checkout@v4
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
-          repository: openDAQ/openDAQ
-
-      - name: Checkout CI actions
-        if: github.repository != 'openDAQ/openDAQ'
-        uses: actions/checkout@v4
-        with:
-          path: _ci-sandbox
-
-      - name: Copy CI actions
-        if: github.repository != 'openDAQ/openDAQ'
-        shell: bash
-        run: cp -r _ci-sandbox/.github/actions .github/
+          sandbox-dir: _ci-sandbox
 
       - name: Apply Patches
-        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         with:
-          patches: |
-            _ci-sandbox/.github/patches/*.patch
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
 
       - name: Setup ccache
-        if: ${{ matrix.disable-ccache != true }}
+        if: matrix.disable-ccache != true
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
         with:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
           target-arch: ${{ matrix.enable-32bit == true && 'x86-32' || '' }}
-
-      # TODO: End of sandbox-only steps
 
       - name: Build SDK
         id: build-sdk
@@ -246,39 +232,25 @@ jobs:
       CXX: g++
 
     steps:
-      # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
-      - name: Checkout openDAQ
+      - name: Checkout
+        id: checkout
         if: github.repository != 'openDAQ/openDAQ'
-        uses: actions/checkout@v4
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
-          repository: openDAQ/openDAQ
-
-      - name: Checkout CI actions
-        if: github.repository != 'openDAQ/openDAQ'
-        uses: actions/checkout@v4
-        with:
-          path: _ci-sandbox
-
-      - name: Copy CI actions
-        if: github.repository != 'openDAQ/openDAQ'
-        shell: bash
-        run: cp -r _ci-sandbox/.github/actions .github/
+          sandbox-dir: _ci-sandbox
 
       - name: Apply Patches
-        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         with:
-          patches: |
-            _ci-sandbox/.github/patches/*.patch
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
 
       - name: Setup ccache
-        if: ${{ matrix.disable-ccache != true }}
+        if: matrix.disable-ccache != true
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
         with:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
-
-      # TODO: End of sandbox-only steps
 
       - name: Build SDK
         id: build-sdk
@@ -411,39 +383,25 @@ jobs:
       CXX: clang++
 
     steps:
-      # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
-      - name: Checkout openDAQ
+      - name: Checkout
+        id: checkout
         if: github.repository != 'openDAQ/openDAQ'
-        uses: actions/checkout@v4
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
-          repository: openDAQ/openDAQ
-
-      - name: Checkout CI actions
-        if: github.repository != 'openDAQ/openDAQ'
-        uses: actions/checkout@v4
-        with:
-          path: _ci-sandbox
-
-      - name: Copy CI actions
-        if: github.repository != 'openDAQ/openDAQ'
-        shell: bash
-        run: cp -r _ci-sandbox/.github/actions .github/
+          sandbox-dir: _ci-sandbox
 
       - name: Apply Patches
-        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         with:
-          patches: |
-            _ci-sandbox/.github/patches/*.patch
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
 
       - name: Setup ccache
-        if: ${{ matrix.disable-ccache != true }}
+        if: matrix.disable-ccache != true
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
         with:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
-
-      # TODO: End of sandbox-only steps
 
       - name: Build SDK
         id: build-sdk
@@ -511,39 +469,25 @@ jobs:
       - name: Install git
         run: yum install -y git
 
-      # TODO: Remove these 3 steps before merging to openDAQ/openDAQ
-      - name: Checkout openDAQ
+      - name: Checkout
+        id: checkout
         if: github.repository != 'openDAQ/openDAQ'
-        uses: actions/checkout@v4
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
-          repository: openDAQ/openDAQ
-
-      - name: Checkout CI actions
-        if: github.repository != 'openDAQ/openDAQ'
-        uses: actions/checkout@v4
-        with:
-          path: _ci-sandbox
-
-      - name: Copy CI actions
-        if: github.repository != 'openDAQ/openDAQ'
-        shell: bash
-        run: cp -r _ci-sandbox/.github/actions .github/
+          sandbox-dir: _ci-sandbox
 
       - name: Apply Patches
-        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         with:
-          patches: |
-            _ci-sandbox/.github/patches/*.patch
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
 
       - name: Setup ccache
-        if: ${{ matrix.disable-ccache != true }}
+        if: matrix.disable-ccache != true
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
         with:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
-
-      # TODO: End of sandbox-only steps
 
       - name: Build SDK
         id: build-sdk
