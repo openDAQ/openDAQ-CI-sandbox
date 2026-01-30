@@ -1,0 +1,63 @@
+name: 'Checkout Sandbox'
+description: 'Checkout project and sandbox repositories, copy CI infrastructure'
+
+inputs:
+  project-repo:
+    description: 'Project repository'
+    required: false
+    default: 'openDAQ/openDAQ'
+  project-ref:
+    description: 'Branch, tag, or SHA to checkout'
+    required: false
+    default: ''
+  sandbox-dir:
+    description: 'Directory to checkout sandbox into'
+    required: false
+    default: '_sandbox'
+  copy-actions:
+    description: 'Copy actions from sandbox to project'
+    required: false
+    default: 'true'
+  copy-workflows:
+    description: 'Copy workflows from sandbox to project'
+    required: false
+    default: 'false'
+
+outputs:
+  sandbox-dir:
+    description: 'Path to sandbox directory'
+    value: ${{ inputs.sandbox-dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout project
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.project-repo }}
+        ref: ${{ inputs.project-ref || '' }}
+
+    - name: Checkout sandbox
+      uses: actions/checkout@v4
+      with:
+        path: ${{ inputs.sandbox-dir }}
+
+    - name: Copy actions
+      if: inputs.copy-actions == 'true'
+      shell: bash
+      run: |
+        if [ -d "${{ inputs.sandbox-dir }}/.github/actions" ]; then
+          mkdir -p .github/actions
+          cp -r ${{ inputs.sandbox-dir }}/.github/actions/* .github/actions/
+          echo "Copied actions from ${{ inputs.sandbox-dir }}/.github/actions"
+        fi
+
+    - name: Copy workflows
+      if: inputs.copy-workflows == 'true'
+      shell: bash
+      run: |
+        if [ -d "${{ inputs.sandbox-dir }}/.github/workflows" ]; then
+          mkdir -p .github/workflows
+          cp -r ${{ inputs.sandbox-dir }}/.github/workflows/* .github/workflows/
+          echo "Copied workflows from ${{ inputs.sandbox-dir }}/.github/workflows"
+        fi
