@@ -137,13 +137,7 @@ jobs:
           cpack-generator: ${{ matrix.cpack-generator }}
           generate-csharp-bindings: false
           generate-python-bindings: false
-
-      - name: Upload SDK Installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: Package (${{ matrix.name }})
-          path: ${{ steps.build-sdk.outputs.package-path }}
-          retention-days: 7
+          upload-artifact: true
 
       - name: Package Python Bindings
         if: matrix.generate-python-bindings == true
@@ -226,6 +220,7 @@ jobs:
 
     outputs:
       linux_x64_artifact_name: ${{ env.linux_x64_artifact }}
+      simulator_package_name: ${{ steps.set-simulator-output.outputs.name }}
 
     env:
       CC: gcc
@@ -245,12 +240,24 @@ jobs:
         with:
           patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
 
+      - name: Copy packages list
+        if: github.repository != 'openDAQ/openDAQ'
+        run: cp -r ${{ steps.checkout.outputs.sandbox-dir }}/.github/packages .github/
+
       - name: Setup ccache
         if: matrix.disable-ccache != true
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
         with:
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
+
+      - name: Debug architecture info
+        run: |
+          echo "=== System Architecture Debug ==="
+          echo "uname -m: $(uname -m)"
+          echo "uname -a: $(uname -a)"
+          echo "arch: $(arch)"
+          echo "================================="
 
       - name: Build SDK
         id: build-sdk
@@ -264,30 +271,19 @@ jobs:
           cpack-generator: DEB
           generate-csharp-bindings: false
           generate-python-bindings: false
+          upload-artifact: true
 
-      - name: Upload Package
-        uses: actions/upload-artifact@v4
-        with:
-          name: Package (${{ matrix.name }})
-          path: ${{ steps.build-sdk.outputs.package-path }}
-          retention-days: 7
+      - name: Set simulator package output
+        id: set-simulator-output
+        if: matrix.generate-simulator-app == true
+        run: echo "name=${{ steps.build-sdk.outputs.package-name }}" >> $GITHUB_OUTPUT
 
       - name: Build Documentation
         if: matrix.generate-doxygen-doc == true
-        shell: bash
-        run: |
-          cmake -B ${{ steps.build-sdk.outputs.build-path }} -G "${{ matrix.cmake-generator }}" -DOPENDAQ_BUILD_DOCUMENTATION=ON
-          cmake --build ${{ steps.build-sdk.outputs.build-path }} --target doc_doxygen
-          cd ${{ steps.build-sdk.outputs.build-path }}/doc_doxygen/html
-          zip -r ../opendaq_cpp_api_reference.zip .
-
-      - name: Upload API Reference
-        if: matrix.generate-doxygen-doc == true
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/build-doc
         with:
-          name: API Reference
-          path: ${{ steps.build-sdk.outputs.build-path }}/doc_doxygen/opendaq_cpp_api_reference.zip
-          retention-days: 7
+          build-path: ${{ steps.build-sdk.outputs.build-path }}
+          artifact-name: API Reference
 
       - name: Build Simulator App
         if: matrix.generate-simulator-app == true
@@ -482,6 +478,10 @@ jobs:
         with:
           patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
 
+      - name: Copy packages list
+        if: github.repository != 'openDAQ/openDAQ'
+        run: cp -r ${{ steps.checkout.outputs.sandbox-dir }}/.github/packages .github/
+
       - name: Setup ccache
         if: matrix.disable-ccache != true
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
@@ -545,7 +545,7 @@ jobs:
       - name: Download package
         uses: actions/download-artifact@v4
         with:
-          name: Package (Linux x86_64 GCC Release)
+          name: ${{ needs.package_linux.outputs.simulator_package_name }}
           path: ${{ env.simulator_directory }}
 
       - name: Download simulator app
@@ -602,7 +602,9 @@ jobs:
       - name: Delete unused artifacts
         uses: geekyeggo/delete-artifact@v5
         with:
-          name: ${{ env.simulator_app_artifact }}
+          name: |
+            ${{ env.simulator_app_artifact }}
+            ${{ needs.package_linux.outputs.simulator_package_name }}
 
   dotnet_bindings:
     runs-on: windows-latest
