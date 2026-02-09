@@ -173,7 +173,7 @@ jobs:
         include:
           - name: Linux x86_64 GCC Release
             runner: ubuntu-latest
-            additional-dependencies: doxygen graphviz wget zip
+            additional-dependencies: graphviz wget zip
             cmake-generator: Ninja
             cmake-build-type: Release
             cmake-defines: >-
