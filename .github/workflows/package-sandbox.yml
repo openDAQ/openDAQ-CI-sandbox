@@ -25,6 +25,7 @@ env:
   linux_x64_artifact: SdkLinux64
   vm_name: device_simulator
   simulator_app_artifact: SimulatorApp
+  project_ref: "ci/refactor-package-workflow-linux-macos-jobs"
 
 jobs:
   package_windows:
@@ -107,14 +108,14 @@ jobs:
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
           project-repo: openDAQ/openDAQ
-          project-ref: "ci/refactor-package-workflow-linux-macos-jobs"
+          project-ref: ${{ env.project_ref }}
           sandbox-dir: _ci-sandbox
 
       - name: Apply Patches
         if: github.repository != 'openDAQ/openDAQ'
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         with:
-          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/nuget-version-suffix.patch
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
 
       - name: Setup ccache
         id: ccache-setup
@@ -134,7 +135,6 @@ jobs:
           cmake-config-preset: ${{ env.cmake_preset }}
           cmake-config-args: ${{ matrix.cmake-defines }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
-          cmake-build-args: ${{ steps.ccache-setup.outputs.msbuild-args }}
           enable-32bit: ${{ matrix.enable-32bit == true }}
           cpack-generator: ${{ matrix.cpack-generator }}
           generate-csharp-bindings: false
@@ -233,6 +233,8 @@ jobs:
         if: github.repository != 'openDAQ/openDAQ'
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
           sandbox-dir: _ci-sandbox
 
       - name: Apply Patches
@@ -385,6 +387,8 @@ jobs:
         if: github.repository != 'openDAQ/openDAQ'
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
           sandbox-dir: _ci-sandbox
 
       - name: Apply Patches
@@ -432,6 +436,8 @@ jobs:
         if: github.repository != 'openDAQ/openDAQ'
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
           sandbox-dir: _ci-sandbox
 
       - name: Detect version
@@ -506,6 +512,8 @@ jobs:
         if: github.repository != 'openDAQ/openDAQ'
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
           sandbox-dir: _ci-sandbox
 
       - name: Apply Patches
@@ -570,6 +578,8 @@ jobs:
         if: github.repository != 'openDAQ/openDAQ'
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
           sandbox-dir: _ci-sandbox
 
       - name: Install tools
@@ -635,9 +645,7 @@ jobs:
       - name: Delete unused artifacts
         uses: geekyeggo/delete-artifact@v5
         with:
-          name: |
-            ${{ env.simulator_app_artifact }}
-            ${{ needs.package_linux.outputs.simulator_package_name }}
+          name: ${{ env.simulator_app_artifact }}
 
   dotnet_bindings:
     runs-on: windows-latest
@@ -666,14 +674,14 @@ jobs:
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
           project-repo: openDAQ/openDAQ
-          project-ref: "ci/refactor-package-workflow-linux-macos-jobs"
+          project-ref: ${{ env.project_ref }}
           sandbox-dir: _ci-sandbox
 
       - name: Apply Patches
         if: github.repository != 'openDAQ/openDAQ'
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         with:
-          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/nuget-version-suffix.patch
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
 
       - name: Detect version
         id: detect
