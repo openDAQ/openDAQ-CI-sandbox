@@ -106,13 +106,15 @@ jobs:
         if: github.repository != 'openDAQ/openDAQ'
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
+          project-repo: openDAQ/openDAQ
+          project-ref: "ci/refactor-package-workflow-linux-macos-jobs"
           sandbox-dir: _ci-sandbox
 
       - name: Apply Patches
         if: github.repository != 'openDAQ/openDAQ'
         uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
         with:
-          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/nuget-version-suffix.patch
 
       - name: Setup ccache
         id: ccache-setup
@@ -146,8 +148,7 @@ jobs:
           python-versions: ${{ env.python_versions }}
           build-path: ${{ steps.build-sdk.outputs.build-path }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
-          package-artifact-name: Wheels (${{ matrix.name }})
-          package-artifact-retention-days: 7
+          upload-artifact: true
 
       - name: Package C# Bindings
         id: package-csharp-bindings
@@ -273,17 +274,17 @@ jobs:
           generate-python-bindings: false
           upload-artifact: true
 
-      - name: Set simulator package output
-        id: set-simulator-output
-        if: matrix.generate-simulator-app == true
-        run: echo "name=${{ steps.build-sdk.outputs.package-name }}" >> $GITHUB_OUTPUT
-
       - name: Build Documentation
         if: matrix.generate-doxygen-doc == true
         uses: ./.github/actions/build-doc
         with:
           build-path: ${{ steps.build-sdk.outputs.build-path }}
           artifact-name: API Reference
+
+      - name: Set simulator package output
+        id: set-simulator-output
+        if: matrix.generate-simulator-app == true
+        run: echo "name=${{ steps.build-sdk.outputs.package-name }}" >> $GITHUB_OUTPUT
 
       - name: Build Simulator App
         if: matrix.generate-simulator-app == true
@@ -317,7 +318,7 @@ jobs:
             !${{ steps.build-sdk.outputs.build-path }}/**/*_test_dll.so
           retention-days: 1
 
-  build_macos:
+  package_macos_wheels:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
 
@@ -417,8 +418,43 @@ jobs:
           python-versions: ${{ env.python_versions }}
           build-path: ${{ steps.build-sdk.outputs.build-path }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
-          package-artifact-name: Wheels (${{ matrix.name }})
-          package-artifact-retention-days: 7
+          upload-artifact: true
+          package-artifact-name-include-arch: true
+
+  package_macos_wheels_combined:
+    name: Combine macOS wheels
+    runs-on: ubuntu-latest
+    needs: [package_macos_wheels]
+
+    steps:
+      - name: Checkout
+        id: checkout
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
+        with:
+          sandbox-dir: _ci-sandbox
+
+      - name: Detect version
+        id: detect
+        uses: ./.github/actions/package-version-detect
+
+      - name: Download macOS wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: opendaq-*-python-wheels-macos-*
+          path: wheels
+          merge-multiple: true
+
+      - name: Upload combined wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: opendaq-${{ steps.detect.outputs.version-wheels }}-python-wheels-macos
+          path: wheels/*.whl
+
+      - name: Delete source artifacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: opendaq-*-python-wheels-macos-*
 
   package_linux_wheels:
     runs-on: ubuntu-latest
@@ -510,8 +546,7 @@ jobs:
           python-versions: ${{ env.python_versions }}
           build-path: ${{ steps.build-sdk.outputs.build-path }}
           cmake-build-type: ${{ matrix.cmake-build-type }}
-          package-artifact-name: Wheels (${{ matrix.name }})
-          package-artifact-retention-days: 7
+          upload-artifact: true
 
   simulator-build:
     runs-on: ubuntu-latest
@@ -531,9 +566,11 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        id: checkout
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
-          repository: openDAQ/openDAQ
+          sandbox-dir: _ci-sandbox
 
       - name: Install tools
         run: |
@@ -557,17 +594,13 @@ jobs:
       - name: Display files in working directory
         run: ls -Rhl
 
-      - name: Read openDAQ version
-        id: daq_version
-        working-directory: .
-        run: |
-          DAQ_VER=$(cat opendaq_version)
-          echo Head openDAQ version: $DAQ_VER
-          echo "DAQ_VERSION=$DAQ_VER" >> "$GITHUB_OUTPUT"
+      - name: Detect version
+        id: detect
+        uses: ./.github/actions/package-version-detect
 
       - name: Define simulator name
         id: simulator_name
-        run: echo "SIMULATOR_NAME=opendaq-${{ steps.daq_version.outputs.DAQ_VERSION }}_${{ env.vm_name }}" >> "$GITHUB_OUTPUT"
+        run: echo "SIMULATOR_NAME=opendaq-${{ steps.detect.outputs.version-full }}_${{ env.vm_name }}" >> "$GITHUB_OUTPUT"
 
       - name: Find binaries and run vagrant
         run: |
@@ -628,9 +661,23 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        id: checkout
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
         with:
-          repository: openDAQ/openDAQ
+          project-repo: openDAQ/openDAQ
+          project-ref: "ci/refactor-package-workflow-linux-macos-jobs"
+          sandbox-dir: _ci-sandbox
+
+      - name: Apply Patches
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
+        with:
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/nuget-version-suffix.patch
+
+      - name: Detect version
+        id: detect
+        uses: ./.github/actions/package-version-detect
 
       - name: Download artifacts for Windows x64
         uses: actions/download-artifact@v4
@@ -653,22 +700,15 @@ jobs:
       - name: Display files
         run: ls -R ${{ env.nuget_work_path }}
 
-      - name: Read openDAQ version
-        id: daq_version
-        shell: bash
-        run: |
-          DAQ_VER=$(cat opendaq_version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
-          echo "DAQ_VERSION=$DAQ_VER" >> "$GITHUB_OUTPUT"
-
       - name: Build NuGet package
         run: |
           $ENV:REPOSITORY_URL = '${{ github.repositoryUrl }}'.Replace('git:','https:')
           $ENV:BRANCH_NAME = '${{ github.base_ref || github.ref_name }}'.Replace('refs/heads/','')
           $ENV:COMMIT_SHA = '${{ github.sha }}'
-          $ENV:SHORT_SHA = '${{ needs.package_windows.outputs.short_sha_dotnet }}'
+          $ENV:SHORT_SHA = '${{ steps.detect.outputs.sha-short }}'
           $SDK_WIN64_PATH = "-p:SDK_WIN64_PATH=""$(Join-Path '${{ github.workspace }}' '${{ env.nuget_work_path_win_x64 }}' -Resolve)"""
           $SDK_LINUX64_PATH = "-p:SDK_LINUX64_PATH=""$(Join-Path '${{ github.workspace }}' '${{ env.nuget_work_path_linux_x64 }}' -Resolve)"""
-          $DAQ_VERSION = '-p:OPENDAQ_PACKAGE_VERSION=${{ steps.daq_version.outputs.DAQ_VERSION }}'
+          $DAQ_VERSION = '-p:OPENDAQ_PACKAGE_VERSION=${{ steps.detect.outputs.version }}'
           if (Test-Path '${{ env.nuget_work_path_win_x64 }}/*.nupkg') { del '${{ env.nuget_work_path_win_x64 }}/*.nupkg' -Force }
           cd '${{ env.dotnet_source_path }}/openDAQ.NET'
           & dotnet restore . --ignore-failed-sources
@@ -677,7 +717,7 @@ jobs:
       - name: Upload NuGet package
         uses: actions/upload-artifact@v4
         with:
-          name: Package (openDAQ.Net NuGet)
+          name: opendaq.net-${{ steps.detect.outputs.version-full }}
           path: ${{ env.nuget_work_path }}/win-x64/openDAQ.Net.*.nupkg
           retention-days: 7
 
