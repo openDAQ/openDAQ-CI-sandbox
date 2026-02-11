@@ -14,15 +14,88 @@ on:
 
 env:
   project_ref: "905beb26396f474ce6ebb90d0148244f33d0370e"
-  sandbox_dir: _ci-sandbox
+  build_path: ${{ github.workspace }}/build
 
 jobs:
-  deploy_packages:
+  build_user_guide:
     runs-on: ubuntu-latest
-    name: Deploy packages to S3
+    name: Build User Guide
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: openDAQ/openDAQ
+          ref: ${{ env.project_ref }}
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '16'
+
+      - name: Install Antora
+        run: npm i antora
+
+      - name: Install Antora extensions
+        run: |
+          npm i @asciidoctor/tabs
+          npm i @springio/antora-extensions
+          npm i @antora/lunr-extension
+
+      - name: Run Antora to build user guide
+        run: >
+          [ "refs/heads/main" != "${{ github.ref }}" ] && npx antora antora-playbook.yml
+          || (export DAQ_DEV_WEBSITE=docs-dev; npx antora antora-playbook-dev.yml)
+
+      - name: Compress user guide
+        working-directory: ${{ env.build_path }}/site/
+        run: zip -r ${{ env.build_path }}/user_guide.zip .
+
+      - name: Upload user guide
+        uses: actions/upload-artifact@v4
+        with:
+          name: user_guide
+          path: ${{ env.build_path }}/user_guide.zip
+          retention-days: 7
+
+      # - name: Configure AWS credentials
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     aws-region: ${{ secrets.AWS_REGION }}
+
+      # - name: Upload user guide to S3
+      #   run: |
+      #     aws s3 rm "s3://${{ env.s3bucket }}/${{ env.s3docpath }}/" --recursive --exclude '*' --include 'user_guide.zip'
+      #     aws s3 cp ${{ env.build_path }}/user_guide.zip "s3://${{ env.s3bucket }}/${{ env.s3docpath }}/"
+
+      # - name: Call the API to deploy the documentation
+      #   run: |
+      #     if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+      #       wget ${{ secrets.DEPLOY_DEV_DOCUMENTATION_URL_AND_TOKEN }}
+      #     else
+      #       wget ${{ secrets.DEPLOY_DOCUMENTATION_URL_AND_TOKEN }}
+      #     fi
+
+      - name: Build examples archive
+        run: zip -r opendaq-examples.zip examples/applications -x examples/applications/CMakeLists.txt
+
+      - name: Upload examples
+        uses: actions/upload-artifact@v4
+        with:
+          name: examples
+          path: opendaq-examples.zip
+          retention-days: 7
+
+  deploy_packages:
+    runs-on: ubuntu-latest
+    name: Deploy packages to S3
+    needs: [build_user_guide]
 
     env:
       RUN_ID: ${{ github.event.workflow_run.id || inputs.run-id }}
@@ -41,31 +114,31 @@ jobs:
           echo "Deploy workflow branch: ${{ github.ref_name }}"
           echo "Source run: #${{ env.RUN_ID }}, branch=$BRANCH, sha=$SHA"
 
-      - name: Checkout
-        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
-        with:
-          project-repo: openDAQ/openDAQ
-          project-ref: ${{ env.project_ref }}
-          sandbox-dir: ${{ env.sandbox_dir }}
-
-      - name: Detect version
-        id: detect
-        uses: ./.github/actions/package-version-detect
-
-      - name: Print deploy info
-        run: |
-          echo "Event: ${{ github.event_name }}"
-          echo "Source run ID: ${{ env.RUN_ID }}"
-          echo "Branch: ${{ steps.source-run.outputs.branch }}"
-          echo "SHA: ${{ steps.source-run.outputs.sha }}"
-          echo "Version: ${{ steps.detect.outputs.version-full }}"
-
-      - name: Download all artifacts
+      - name: Download package artifacts
         uses: actions/download-artifact@v4
         with:
           path: _artifacts/download
           run-id: ${{ env.RUN_ID }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download user guide
+        uses: actions/download-artifact@v4
+        with:
+          name: user_guide
+          path: _artifacts/download
+
+      - name: Download examples
+        uses: actions/download-artifact@v4
+        with:
+          name: examples
+          path: _artifacts/download
+
+      - name: List downloaded artifacts
+        run: |
+          echo '## Downloaded artifacts' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tree -F _artifacts/download | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Organize artifacts for S3
         env:
@@ -77,19 +150,24 @@ jobs:
           mkdir -p "${DST}/SDK"
           mkdir -p "${DST}/Python Wheels (Linux x86_64)"
           mkdir -p "${DST}/Python Wheels (Windows amd64)"
-          mkdir -p "${DST}/Python Wheels (MacOS)"
+          mkdir -p "${DST}/Python Wheels (MacOS x86_64)"
+          mkdir -p "${DST}/Python Wheels (MacOS ARM)"
           mkdir -p "${DST}/dotNET Bindings"
           mkdir -p "${DST}/Simulator"
           mkdir -p "${DST}/Specifications and documentation"
 
-          # SDK packages (Windows + Linux, all architectures)
-          find "${SRC}"/opendaq-*_win_* "${SRC}"/opendaq-*_linux_* -type f \
-            ! -name '*.ova' 2>/dev/null | while read f; do cp "$f" "${DST}/SDK/"; done
+          # SDK packages
+          cp "${SRC}"/opendaq-*_win_*/*.exe   "${DST}/SDK/"
+          cp "${SRC}"/opendaq-*_linux_*/*.deb "${DST}/SDK/"
+
+          # Examples
+          cp "${SRC}"/opendaq-examples.zip "${DST}/SDK/"
 
           # Python Wheels
           cp "${SRC}"/opendaq-*-python-wheels-linux/*.whl   "${DST}/Python Wheels (Linux x86_64)/"
           cp "${SRC}"/opendaq-*-python-wheels-windows/*.whl "${DST}/Python Wheels (Windows amd64)/"
-          cp "${SRC}"/opendaq-*-python-wheels-macos/*.whl   "${DST}/Python Wheels (MacOS)/"
+          cp "${SRC}"/opendaq-*-python-wheels-macos-x86_64/*.whl "${DST}/Python Wheels (MacOS x86_64)/"
+          cp "${SRC}"/opendaq-*-python-wheels-macos-arm64/*.whl "${DST}/Python Wheels (MacOS ARM)/"
 
           # NuGet
           cp "${SRC}"/opendaq.net-*/*.nupkg "${DST}/dotNET Bindings/"
@@ -97,14 +175,15 @@ jobs:
           # Simulator OVA
           cp "${SRC}"/opendaq-*_device_simulator*/*.ova "${DST}/Simulator/"
 
-          # API Reference (rename to match existing S3 convention)
+          # Documentation
           cp "${SRC}/API Reference"/*.zip "${DST}/Specifications and documentation/cpp_api_reference.zip"
+          cp "${SRC}"/user_guide.zip "${DST}/Specifications and documentation/"
 
       - name: List organized artifacts
         run: |
           echo '## Artifacts ready for S3 upload' >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          tree -hF _artifacts/output >> $GITHUB_STEP_SUMMARY
+          tree -F _artifacts/output | tee -a $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       # --- S3 Upload (uncomment when AWS credentials are configured) ---

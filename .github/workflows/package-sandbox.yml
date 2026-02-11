@@ -1,0 +1,732 @@
+name: Build openDAQ packages
+
+
+on:
+  push:
+    branches: [release/**]
+
+  workflow_dispatch:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+  workflow_call:
+    inputs:
+      cmake_preset:
+        required: false
+        type: string
+      ctest_preset:
+        required: false
+        type: string
+
+env:
+  cmake_preset: package
+  python_versions: 3.8 3.14
+  windows_x64_artifact: SdkWindows64
+  linux_x64_artifact: SdkLinux64
+  vm_name: device_simulator
+  simulator_app_artifact: SimulatorApp
+  project_ref: "905beb26396f474ce6ebb90d0148244f33d0370e"
+
+jobs:
+  package_windows:
+    runs-on: ${{ matrix.runner }}
+    name: ${{ matrix.name }}
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.name }}
+      cancel-in-progress: true
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        # https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners
+        include:
+          - name: Windows VS 2022 x64 Release
+            runner: windows-latest
+            cmake-generator: "Visual Studio 17 2022"
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF
+              -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
+              -DOPENDAQ_ENABLE_TESTS=OFF
+              -DOPENDAQ_ENABLE_TEST_UTILS=OFF
+              -DOPENDAQ_BUILD_DOCUMENTATION=OFF
+              -DOPENDAQ_ENABLE_OPCUA=OFF
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+              -DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF
+              -DDAQSIMULATOR_ENABLE_SIMULATOR_APP=OFF
+              -DDAQMODULES_REF_FB_MODULE=OFF
+              -DDAQMODULES_REF_DEVICE_MODULE=OFF
+              -DDAQMODULES_AUDIO_DEVICE_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
+              -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
+            cpack-generator: NSIS
+            enable-32bit: false
+            generate-python-bindings: true
+            generate-csharp-bindings: true
+
+          - name: Windows VS 2022 Win32 Release
+            runner: windows-latest
+            cmake-generator: "Visual Studio 17 2022"
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DOPENDAQ_GENERATE_PYTHON_BINDINGS=OFF
+              -DOPENDAQ_GENERATE_CSHARP_BINDINGS=OFF
+              -DOPENDAQ_ENABLE_TESTS=OFF
+              -DOPENDAQ_ENABLE_TEST_UTILS=OFF
+              -DOPENDAQ_BUILD_DOCUMENTATION=OFF
+              -DOPENDAQ_ENABLE_OPCUA=OFF
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+              -DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF
+              -DDAQSIMULATOR_ENABLE_SIMULATOR_APP=OFF
+              -DDAQMODULES_REF_FB_MODULE=OFF
+              -DDAQMODULES_REF_DEVICE_MODULE=OFF
+              -DDAQMODULES_AUDIO_DEVICE_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
+              -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
+            cpack-generator: NSIS
+            enable-32bit: true
+            generate-python-bindings: false
+            generate-csharp-bindings: false
+
+    outputs:
+      # trick for reusable workflow in dotnet_bindings because cannot use env context in "with:"
+      # test_path: ''
+      windows_x64_artifact_name: ${{ env.windows_x64_artifact }}
+      # short_sha: ${{ env.short_sha }}
+      short_sha_dotnet: ${{ steps.package-csharp-bindings.outputs.short-sha-dotnet }}
+
+    env:
+      short_sha: 'package'  # for .NET Bindings build
+
+    steps:
+      - name: Checkout
+        id: checkout
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
+        with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
+          sandbox-dir: _ci-sandbox
+
+      - name: Apply Patches
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
+        with:
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
+
+      - name: Setup ccache
+        id: ccache-setup
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/setup-ccache-ms-build-cache
+        with:
+          use-msbuild-cache: true
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          target-arch: ${{ matrix.enable-32bit == true && 'x86-32' || '' }}
+
+      - name: Build SDK
+        id: build-sdk
+        uses: ./.github/actions/build-sdk
+        with:
+          additional-dependencies: nsis
+          cmake-generator: ${{ matrix.cmake-generator }}
+          cmake-config-preset: ${{ env.cmake_preset }}
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          enable-32bit: ${{ matrix.enable-32bit == true }}
+          cpack-generator: ${{ matrix.cpack-generator }}
+          generate-csharp-bindings: false
+          generate-python-bindings: false
+          upload-artifact: true
+
+      - name: Package Python Bindings
+        if: matrix.generate-python-bindings == true
+        uses: ./.github/actions/package-bindings-python
+        with:
+          python-versions: ${{ env.python_versions }}
+          build-path: ${{ steps.build-sdk.outputs.build-path }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          upload-artifact: true
+
+      - name: Package C# Bindings
+        id: package-csharp-bindings
+        if: matrix.generate-csharp-bindings == true
+        uses: ./.github/actions/package-bindings-csharp
+        with:
+          build-path: ${{ steps.build-sdk.outputs.build-path }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          package-artifact-name: ${{ env.windows_x64_artifact }}
+          package-artifact-retention-days: 7
+
+  package_linux:
+    runs-on: ${{ matrix.runner }}
+    name: ${{ matrix.name }}
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.name }}
+      cancel-in-progress: true
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64 GCC Release
+            runner: ubuntu-latest
+            additional-dependencies: graphviz wget zip
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DOPENDAQ_ENABLE_TESTS=OFF
+              -DOPENDAQ_ENABLE_TEST_UTILS=OFF
+              -DOPENDAQ_ENABLE_OPCUA=OFF
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+              -DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF
+              -DDAQMODULES_REF_FB_MODULE=OFF
+              -DDAQMODULES_REF_DEVICE_MODULE=OFF
+              -DDAQMODULES_AUDIO_DEVICE_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
+              -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            disable-ccache: false
+            generate-simulator-app: true
+            generate-doxygen-doc: true
+            generate-csharp-bindings: true
+
+          - name: Linux ARM64 GCC Release
+            runner: ubuntu-24.04-arm
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DOPENDAQ_ENABLE_TESTS=OFF
+              -DOPENDAQ_ENABLE_TEST_UTILS=OFF
+              -DOPENDAQ_ENABLE_OPCUA=OFF
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+              -DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF
+              -DDAQMODULES_REF_FB_MODULE=OFF
+              -DDAQMODULES_REF_DEVICE_MODULE=OFF
+              -DDAQMODULES_AUDIO_DEVICE_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
+              -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            disable-ccache: false
+            generate-simulator-app: false
+            generate-doxygen-doc: false
+            generate-csharp-bindings: false
+
+    outputs:
+      linux_x64_artifact_name: ${{ env.linux_x64_artifact }}
+      simulator_package_name: ${{ steps.set-simulator-output.outputs.name }}
+
+    env:
+      CC: gcc
+      CXX: g++
+
+    steps:
+      - name: Checkout
+        id: checkout
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
+        with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
+          sandbox-dir: _ci-sandbox
+
+      - name: Apply Patches
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
+        with:
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
+
+      - name: Copy packages list
+        if: github.repository != 'openDAQ/openDAQ'
+        run: cp -r ${{ steps.checkout.outputs.sandbox-dir }}/.github/packages .github/
+
+      - name: Setup ccache
+        if: matrix.disable-ccache != true
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
+        with:
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+
+      - name: Debug architecture info
+        run: |
+          echo "=== System Architecture Debug ==="
+          echo "uname -m: $(uname -m)"
+          echo "uname -a: $(uname -a)"
+          echo "arch: $(arch)"
+          echo "================================="
+
+      - name: Build SDK
+        id: build-sdk
+        uses: ./.github/actions/build-sdk
+        with:
+          additional-dependencies: ${{ matrix.additional-dependencies }}
+          cmake-generator: ${{ matrix.cmake-generator }}
+          cmake-config-preset: ${{ env.cmake_preset }}
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          cpack-generator: DEB
+          generate-csharp-bindings: false
+          generate-python-bindings: false
+          upload-artifact: true
+
+      - name: Build Documentation
+        if: matrix.generate-doxygen-doc == true
+        uses: ./.github/actions/build-doc
+        with:
+          build-path: ${{ steps.build-sdk.outputs.build-path }}
+          artifact-name: API Reference
+
+      - name: Set simulator package output
+        id: set-simulator-output
+        if: matrix.generate-simulator-app == true
+        run: echo "name=${{ steps.build-sdk.outputs.package-name }}" >> $GITHUB_OUTPUT
+
+      - name: Build Simulator App
+        if: matrix.generate-simulator-app == true
+        shell: bash
+        run: |
+          cmake -B ${{ steps.build-sdk.outputs.build-path }} -G "${{ matrix.cmake-generator }}" \
+            -DDAQSIMULATOR_ENABLE_SIMULATOR_APP=ON \
+            -DDAQMODULES_REF_DEVICE_MODULE=ON \
+            -DDAQMODULES_REF_FB_MODULE=ON \
+            -DDAQMODULES_OPENDAQ_SERVER_MODULE=ON \
+            -DOPENDAQ_ENABLE_NATIVE_STREAMING=ON \
+            -DOPENDAQ_ENABLE_OPCUA=ON
+          cmake --build ${{ steps.build-sdk.outputs.build-path }} --target application_simulator
+
+      - name: Upload Simulator App
+        if: matrix.generate-simulator-app == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimulatorApp
+          path: ${{ steps.build-sdk.outputs.build-path }}/bin/application_simulator
+          retention-days: 7
+
+      - name: Upload binaries for .NET NuGet
+        if: matrix.generate-csharp-bindings == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.linux_x64_artifact }}
+          path: |
+            ${{ steps.build-sdk.outputs.build-path }}/bin/*.so
+            !${{ steps.build-sdk.outputs.build-path }}/**/opendaq.cpython*
+            !${{ steps.build-sdk.outputs.build-path }}/**/*_test_dll.so
+          retention-days: 1
+
+  package_macos_wheels:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.name }}
+      cancel-in-progress: true
+    timeout-minutes: 400
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS x86_64 Clang Release
+            runner: macos-15-intel
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+              -DOPENDAQ_ENABLE_TESTS=OFF
+              -DOPENDAQ_ENABLE_TEST_UTILS=OFF
+              -DOPENDAQ_BUILD_DOCUMENTATION=OFF
+              -DOPENDAQ_ENABLE_OPCUA=OFF
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+              -DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF
+              -DDAQSIMULATOR_ENABLE_SIMULATOR_APP=OFF
+              -DDAQMODULES_REF_FB_MODULE=OFF
+              -DDAQMODULES_REF_DEVICE_MODULE=OFF
+              -DDAQMODULES_AUDIO_DEVICE_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
+              -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache                                                                                                                                                                    
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache   
+            disable-ccache: false
+
+          - name: macOS ARM64 Clang Release
+            runner: macos-latest
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+              -DOPENDAQ_ENABLE_TESTS=OFF
+              -DOPENDAQ_ENABLE_TEST_UTILS=OFF
+              -DOPENDAQ_BUILD_DOCUMENTATION=OFF
+              -DOPENDAQ_ENABLE_OPCUA=OFF
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+              -DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF
+              -DDAQSIMULATOR_ENABLE_SIMULATOR_APP=OFF
+              -DDAQMODULES_REF_FB_MODULE=OFF
+              -DDAQMODULES_REF_DEVICE_MODULE=OFF
+              -DDAQMODULES_AUDIO_DEVICE_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
+              -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache                                                                                                                                                                    
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache   
+            disable-ccache: false
+    env:
+      CC: clang
+      CXX: clang++
+
+    steps:
+      - name: Checkout
+        id: checkout
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
+        with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
+          sandbox-dir: _ci-sandbox
+
+      - name: Apply Patches
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
+        with:
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
+
+      - name: Setup ccache
+        if: matrix.disable-ccache != true
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
+        with:
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+
+      - name: Build SDK
+        id: build-sdk
+        uses: ./.github/actions/build-sdk
+        with:
+          additional-dependencies: nsis
+          cmake-generator: ${{ matrix.cmake-generator }}
+          cmake-config-preset: ${{ env.cmake_preset }}
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          generate-csharp-bindings: false
+          generate-python-bindings: false
+
+      - name: Package Python Bindings
+        uses: ./.github/actions/package-bindings-python
+        with:
+          python-versions: ${{ env.python_versions }}
+          build-path: ${{ steps.build-sdk.outputs.build-path }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          upload-artifact: true
+          package-artifact-name-include-arch: true
+
+  package_macos_wheels_combined:
+    name: Combine macOS wheels
+    runs-on: ubuntu-latest
+    needs: [package_macos_wheels]
+
+    steps:
+      - name: Checkout
+        id: checkout
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
+        with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
+          sandbox-dir: _ci-sandbox
+
+      - name: Detect version
+        id: detect
+        uses: ./.github/actions/package-version-detect
+
+      - name: Download macOS wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: opendaq-*-python-wheels-macos-*
+          path: wheels
+          merge-multiple: true
+
+      - name: Upload combined wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: opendaq-${{ steps.detect.outputs.version-wheels }}-python-wheels-macos
+          path: wheels/*.whl
+
+  package_linux_wheels:
+    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.name }}
+      cancel-in-progress: true
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: manylinux_2_28 gcc Release
+            image: quay.io/pypa/manylinux_2_28_x86_64
+            cmake-generator: Ninja
+            cmake-build-type: Release
+            cmake-defines: >-
+              -DOPENDAQ_ENABLE_TESTS=OFF
+              -DOPENDAQ_ENABLE_TEST_UTILS=OFF
+              -DOPENDAQ_BUILD_DOCUMENTATION=OFF
+              -DOPENDAQ_ENABLE_OPCUA=OFF
+              -DOPENDAQ_ENABLE_WEBSOCKET_STREAMING=OFF
+              -DOPENDAQ_ENABLE_NATIVE_STREAMING=OFF
+              -DDAQSIMULATOR_ENABLE_SIMULATOR_APP=OFF
+              -DDAQMODULES_REF_FB_MODULE=OFF
+              -DDAQMODULES_REF_DEVICE_MODULE=OFF
+              -DDAQMODULES_AUDIO_DEVICE_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_CLIENT_MODULE=OFF
+              -DDAQMODULES_OPENDAQ_SERVER_MODULE=OFF
+              -DDAQMODULES_BASIC_CSV_RECORDER_MODULE=OFF
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            disable-ccache: false
+
+    container:
+      image: ${{ matrix.image }}
+      env:
+        TZ: Europe/Berlin
+        CC: gcc
+        CXX: g++
+
+    steps:
+      - name: Install git
+        run: yum install -y git
+
+      - name: Checkout
+        id: checkout
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
+        with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
+          sandbox-dir: _ci-sandbox
+
+      - name: Apply Patches
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
+        with:
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
+
+      - name: Copy packages list
+        if: github.repository != 'openDAQ/openDAQ'
+        run: cp -r ${{ steps.checkout.outputs.sandbox-dir }}/.github/packages .github/
+
+      - name: Setup ccache
+        if: matrix.disable-ccache != true
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/ccache-setup@actions/ccache-setup
+        with:
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+
+      - name: Build SDK
+        id: build-sdk
+        uses: ./.github/actions/build-sdk
+        with:
+          skip-setup-python: true
+          skip-setup-ninja: true
+          additional-dependencies: ninja-build
+          cmake-generator: ${{ matrix.cmake-generator }}
+          cmake-config-preset: ${{ env.cmake_preset }}
+          cmake-config-args: ${{ matrix.cmake-defines }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          generate-python-bindings: false
+          generate-csharp-bindings: false
+
+      - name: Package Python Bindings
+        uses: ./.github/actions/package-bindings-python
+        with:
+          skip-setup-python: true
+          python-versions: ${{ env.python_versions }}
+          build-path: ${{ steps.build-sdk.outputs.build-path }}
+          cmake-build-type: ${{ matrix.cmake-build-type }}
+          upload-artifact: true
+
+  simulator-build:
+    runs-on: ubuntu-latest
+    name: Simulator build
+    needs: [package_linux]
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-simulator
+      cancel-in-progress: true
+    timeout-minutes: 120
+    env:
+      simulator_directory: simulator
+
+    defaults:
+      run:
+        working-directory: ${{ env.simulator_directory }}
+
+    steps:
+      - name: Checkout
+        id: checkout
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
+        with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
+          sandbox-dir: _ci-sandbox
+
+      - name: Install tools
+        run: |
+          wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt update
+          sudo apt install -y virtualbox vagrant
+
+      - name: Download package
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package_linux.outputs.simulator_package_name }}
+          path: ${{ env.simulator_directory }}
+
+      - name: Download simulator app
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.simulator_app_artifact }}
+          path: ${{ env.simulator_directory }}
+
+      - name: Display files in working directory
+        run: ls -Rhl
+
+      - name: Detect version
+        id: detect
+        uses: ./.github/actions/package-version-detect
+
+      - name: Define simulator name
+        id: simulator_name
+        run: echo "SIMULATOR_NAME=opendaq-${{ steps.detect.outputs.version-full }}_${{ env.vm_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Find binaries and run vagrant
+        run: |
+          debfiles=( *.deb )
+          vagrant --version
+          VM_NAME=${{ steps.simulator_name.outputs.SIMULATOR_NAME }} HOME_PATH=$HOME PACKAGE_NAME=${debfiles[0]} vagrant up
+          VM_NAME=${{ steps.simulator_name.outputs.SIMULATOR_NAME }} HOME_PATH=$HOME PACKAGE_NAME=${debfiles[0]} vagrant halt
+
+      - name: vboxmanage modify and compact
+        run: |
+          vboxmanage modifyvm ${{ steps.simulator_name.outputs.SIMULATOR_NAME }} --audio none --uart1 off --nic1 hostonly --hostonlyadapter1 "VirtualBox Host-Only Ethernet Adapter"
+          vboxmanage modifymedium disk "${{ steps.simulator_name.outputs.SIMULATOR_NAME }}.vdi" --compact
+
+      - name: vboxmanage check
+        run: |
+          vboxmanage list vms
+          vboxmanage list hostonlyifs
+          vboxmanage list hdds
+
+      - name: export VM to .ova appliance
+        run: |
+          vboxmanage export ${{ steps.simulator_name.outputs.SIMULATOR_NAME }} -o ${{ steps.simulator_name.outputs.SIMULATOR_NAME }}.ova --options manifest,nomacs
+          ls -hl ${{ steps.simulator_name.outputs.SIMULATOR_NAME }}.ova
+
+      - name: Upload OVA image
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.simulator_name.outputs.SIMULATOR_NAME }}-ova-image
+          path: simulator/${{ steps.simulator_name.outputs.SIMULATOR_NAME }}.ova
+          retention-days: 7
+
+      - name: Delete unused artifacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: ${{ env.simulator_app_artifact }}
+
+  dotnet_bindings:
+    runs-on: windows-latest
+    name: .NET Bindings NuGet
+    needs: [package_windows, package_linux]
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-nuget
+      cancel-in-progress: true
+    timeout-minutes: 15
+
+    env:
+      nuget_work_path: ./build/nuget_work
+      nuget_work_path_win_x64: ./build/nuget_work/win-x64
+      nuget_work_path_linux_x64: ./build/nuget_work/linux-x64
+      dotnet_source_path: ./bindings/dotnet/openDAQ.Net
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout
+        id: checkout
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
+        with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
+          sandbox-dir: _ci-sandbox
+
+      - name: Apply Patches
+        if: github.repository != 'openDAQ/openDAQ'
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/git-apply@actions/git-apply
+        with:
+          patches: ${{ steps.checkout.outputs.sandbox-dir }}/.github/patches/*.patch
+
+      - name: Detect version
+        id: detect
+        uses: ./.github/actions/package-version-detect
+
+      - name: Download artifacts for Windows x64
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package_windows.outputs.windows_x64_artifact_name }}
+          path: ${{ env.nuget_work_path_win_x64 }}
+
+      - name: Download artifacts for Linux x64
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package_linux.outputs.linux_x64_artifact_name }}
+          path: ${{ env.nuget_work_path_linux_x64 }}
+
+      - name: Cleanup test files from Linux artifacts
+        working-directory: ${{ env.nuget_work_path_linux_x64 }}
+        run: |
+          if (Test-Path "*_test_dll.so") { del *_test_dll.so -Force }
+          if (Test-Path "opendaq.cpython*") { del opendaq.cpython* -Force }
+
+      - name: Display files
+        run: ls -R ${{ env.nuget_work_path }}
+
+      - name: Build NuGet package
+        run: |
+          $ENV:REPOSITORY_URL = '${{ github.repositoryUrl }}'.Replace('git:','https:')
+          $ENV:BRANCH_NAME = '${{ github.base_ref || github.ref_name }}'.Replace('refs/heads/','')
+          $ENV:COMMIT_SHA = '${{ github.sha }}'
+          $ENV:SHORT_SHA = '${{ steps.detect.outputs.sha-short }}'
+          $SDK_WIN64_PATH = "-p:SDK_WIN64_PATH=""$(Join-Path '${{ github.workspace }}' '${{ env.nuget_work_path_win_x64 }}' -Resolve)"""
+          $SDK_LINUX64_PATH = "-p:SDK_LINUX64_PATH=""$(Join-Path '${{ github.workspace }}' '${{ env.nuget_work_path_linux_x64 }}' -Resolve)"""
+          $DAQ_VERSION = '-p:OPENDAQ_PACKAGE_VERSION=${{ steps.detect.outputs.version }}'
+          if (Test-Path '${{ env.nuget_work_path_win_x64 }}/*.nupkg') { del '${{ env.nuget_work_path_win_x64 }}/*.nupkg' -Force }
+          cd '${{ env.dotnet_source_path }}/openDAQ.NET'
+          & dotnet restore . --ignore-failed-sources
+          & dotnet pack . --no-build --configuration Release $SDK_WIN64_PATH $SDK_LINUX64_PATH $DAQ_VERSION
+
+      - name: Upload NuGet package
+        uses: actions/upload-artifact@v4
+        with:
+          name: opendaq.net-${{ steps.detect.outputs.version-full }}
+          path: ${{ env.nuget_work_path }}/win-x64/openDAQ.Net.*.nupkg
+          retention-days: 7
+
+      - name: Delete source artifacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            ${{ needs.package_windows.outputs.windows_x64_artifact_name }}
+            ${{ needs.package_linux.outputs.linux_x64_artifact_name }}
