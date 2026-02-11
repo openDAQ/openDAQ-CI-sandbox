@@ -1,0 +1,121 @@
+name: Deploy openDAQ packages (sandbox)
+
+on:
+  workflow_run:
+    workflows: ["Build openDAQ packages"]
+    types: [completed]
+
+  workflow_dispatch:
+    inputs:
+      run-id:
+        description: 'Package workflow run ID to deploy from (leave empty to use latest successful)'
+        required: false
+        type: string
+
+env:
+  project_ref: "905beb26396f474ce6ebb90d0148244f33d0370e"
+  sandbox_dir: _ci-sandbox
+
+jobs:
+  deploy_packages:
+    runs-on: ubuntu-latest
+    name: Deploy packages to S3
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    env:
+      RUN_ID: ${{ github.event.workflow_run.id || inputs.run-id }}
+
+    steps:
+      - name: Get source run info
+        id: source-run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_INFO=$(gh api repos/${{ github.repository }}/actions/runs/${{ env.RUN_ID }})
+          BRANCH=$(echo "$RUN_INFO" | jq -r '.head_branch')
+          SHA=$(echo "$RUN_INFO" | jq -r '.head_sha')
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "Deploy workflow branch: ${{ github.ref_name }}"
+          echo "Source run: #${{ env.RUN_ID }}, branch=$BRANCH, sha=$SHA"
+
+      - name: Checkout
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
+        with:
+          project-repo: openDAQ/openDAQ
+          project-ref: ${{ env.project_ref }}
+          sandbox-dir: ${{ env.sandbox_dir }}
+
+      - name: Detect version
+        id: detect
+        uses: ./.github/actions/package-version-detect
+
+      - name: Print deploy info
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Source run ID: ${{ env.RUN_ID }}"
+          echo "Branch: ${{ steps.source-run.outputs.branch }}"
+          echo "SHA: ${{ steps.source-run.outputs.sha }}"
+          echo "Version: ${{ steps.detect.outputs.version-full }}"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: _artifacts/download
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Organize artifacts for S3
+        env:
+          BRANCH: ${{ steps.source-run.outputs.branch }}
+        run: |
+          SRC="_artifacts/download"
+          DST="_artifacts/output/releases/${BRANCH}"
+
+          mkdir -p "${DST}/SDK"
+          mkdir -p "${DST}/Python Wheels (Linux x86_64)"
+          mkdir -p "${DST}/Python Wheels (Windows amd64)"
+          mkdir -p "${DST}/Python Wheels (MacOS)"
+          mkdir -p "${DST}/dotNET Bindings"
+          mkdir -p "${DST}/Simulator"
+          mkdir -p "${DST}/Specifications and documentation"
+
+          # SDK packages (Windows + Linux, all architectures)
+          find "${SRC}"/opendaq-*_win_* "${SRC}"/opendaq-*_linux_* -type f \
+            ! -name '*.ova' 2>/dev/null | while read f; do cp "$f" "${DST}/SDK/"; done
+
+          # Python Wheels
+          cp "${SRC}"/opendaq-*-python-wheels-linux/*.whl   "${DST}/Python Wheels (Linux x86_64)/"
+          cp "${SRC}"/opendaq-*-python-wheels-windows/*.whl "${DST}/Python Wheels (Windows amd64)/"
+          cp "${SRC}"/opendaq-*-python-wheels-macos/*.whl   "${DST}/Python Wheels (MacOS)/"
+
+          # NuGet
+          cp "${SRC}"/opendaq.net-*/*.nupkg "${DST}/dotNET Bindings/"
+
+          # Simulator OVA
+          cp "${SRC}"/opendaq-*_device_simulator*/*.ova "${DST}/Simulator/"
+
+          # API Reference (rename to match existing S3 convention)
+          cp "${SRC}/API Reference"/*.zip "${DST}/Specifications and documentation/cpp_api_reference.zip"
+
+      - name: List organized artifacts
+        run: |
+          echo '## Artifacts ready for S3 upload' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tree -hF _artifacts/output >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      # --- S3 Upload (uncomment when AWS credentials are configured) ---
+
+      # - name: Configure AWS credentials
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     aws-region: ${{ secrets.AWS_REGION }}
+
+      # - name: Upload to S3
+      #   run: |
+      #     aws s3 sync _artifacts/output/ "s3://${S3BUCKET}/" --size-only
