@@ -25,6 +25,9 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     timeout-minutes: 10
 
+    outputs:
+      examples-artifact-name: ${{ steps.examples.outputs.artifact-name }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -82,14 +85,23 @@ jobs:
       #       wget ${{ secrets.DEPLOY_DOCUMENTATION_URL_AND_TOKEN }}
       #     fi
 
+      - name: Detect version
+        id: detect
+        uses: ./.github/actions/package-version-detect
+
       - name: Build examples archive
-        run: zip -r opendaq-examples.zip examples/applications -x examples/applications/CMakeLists.txt
+        id: examples
+        run: |
+          EXAMPLES_NAME="opendaq-${{ steps.detect.outputs.version-full }}-examples"
+          zip -r "${EXAMPLES_NAME}.zip" examples/applications -x examples/applications/CMakeLists.txt
+          echo "artifact-name=$EXAMPLES_NAME" >> $GITHUB_OUTPUT
+          echo "artifact-path=${EXAMPLES_NAME}.zip" >> $GITHUB_OUTPUT
 
       - name: Upload examples
         uses: actions/upload-artifact@v4
         with:
-          name: examples
-          path: opendaq-examples.zip
+          name: ${{ steps.examples.outputs.artifact-name }}
+          path: ${{ steps.examples.outputs.artifact-path }}
           retention-days: 7
 
   deploy_packages:
@@ -99,6 +111,18 @@ jobs:
 
     env:
       RUN_ID: ${{ github.event.workflow_run.id || inputs.run-id }}
+      DOWNLOAD_PATH: ${{ github.workspace }}/_artifacts/download
+      # TODO: Remove UPLOAD_PATH outside of sandbox
+      UPLOAD_PATH: ${{ github.workspace }}/_artifacts/upload
+      DST_ROOT_DIR: releases
+      SDK_DIR: SDK
+      WHEELS_LINUX_X64_DIR: Python Wheels (Linux x86_64)
+      WHEELS_WINDOWS_X64_DIR: Python Wheels (Windows amd64)
+      WHEELS_MACOS_X64_DIR: Python Wheels (MacOS x86_64)
+      WHEELS_MACOS_ARM_DIR: Python Wheels (MacOS ARM)
+      DOTNET_DIR: dotNET Bindings
+      SIMULATOR_DIR: Simulator
+      DOC_DIR: Specifications and documentation
 
     steps:
       - name: Get source run info
@@ -117,7 +141,7 @@ jobs:
       - name: Download package artifacts
         uses: actions/download-artifact@v4
         with:
-          path: _artifacts/download
+          path: ${{ env.DOWNLOAD_PATH }}
           run-id: ${{ env.RUN_ID }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -125,76 +149,118 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: user_guide
-          path: _artifacts/download
+          path: ${{ env.DOWNLOAD_PATH }}
 
       - name: Download examples
         uses: actions/download-artifact@v4
         with:
-          name: examples
-          path: _artifacts/download
+          name: ${{ needs.build_user_guide.outputs.examples-artifact-name }}
+          path: ${{ env.DOWNLOAD_PATH }}
 
       - name: List downloaded artifacts
         run: |
           echo '## Downloaded artifacts' >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          tree -F _artifacts/download | tee -a $GITHUB_STEP_SUMMARY
+          tree -F ${DOWNLOAD_PATH} | tee -a $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
+      # +++ Sandbox steps +++
       - name: Organize artifacts for S3
         env:
           BRANCH: ${{ steps.source-run.outputs.branch }}
         run: |
-          SRC="_artifacts/download"
-          DST="_artifacts/output/releases/${BRANCH}"
+          SRC="${DOWNLOAD_PATH}"
+          DST="${UPLOAD_PATH}/${DST_ROOT_DIR}/${BRANCH}"
 
-          mkdir -p "${DST}/SDK"
-          mkdir -p "${DST}/Python Wheels (Linux x86_64)"
-          mkdir -p "${DST}/Python Wheels (Windows amd64)"
-          mkdir -p "${DST}/Python Wheels (MacOS x86_64)"
-          mkdir -p "${DST}/Python Wheels (MacOS ARM)"
-          mkdir -p "${DST}/dotNET Bindings"
-          mkdir -p "${DST}/Simulator"
-          mkdir -p "${DST}/Specifications and documentation"
+          mkdir -p "${DST}/${SDK_DIR}"
+          mkdir -p "${DST}/${WHEELS_LINUX_X64_DIR}"
+          mkdir -p "${DST}/${WHEELS_WINDOWS_X64_DIR}"
+          mkdir -p "${DST}/${WHEELS_MACOS_X64_DIR}"
+          mkdir -p "${DST}/${WHEELS_MACOS_ARM_DIR}"
+          mkdir -p "${DST}/${DOTNET_DIR}"
+          mkdir -p "${DST}/${SIMULATOR_DIR}"
+          mkdir -p "${DST}/${DOC_DIR}"
 
           # SDK packages
-          cp "${SRC}"/opendaq-*_win_*/*.exe   "${DST}/SDK/"
-          cp "${SRC}"/opendaq-*_linux_*/*.deb "${DST}/SDK/"
+          cp "${SRC}"/opendaq-*_win_*/*.exe   "${DST}/${SDK_DIR}/"
+          cp "${SRC}"/opendaq-*_linux_*/*.deb "${DST}/${SDK_DIR}/"
 
           # Examples
-          cp "${SRC}"/opendaq-examples.zip "${DST}/SDK/"
+          cp "${SRC}"/opendaq-*-examples.zip "${DST}/${SDK_DIR}/"
 
           # Python Wheels
-          cp "${SRC}"/opendaq-*-python-wheels-linux/*.whl   "${DST}/Python Wheels (Linux x86_64)/"
-          cp "${SRC}"/opendaq-*-python-wheels-windows/*.whl "${DST}/Python Wheels (Windows amd64)/"
-          cp "${SRC}"/opendaq-*-python-wheels-macos-x86_64/*.whl "${DST}/Python Wheels (MacOS x86_64)/"
-          cp "${SRC}"/opendaq-*-python-wheels-macos-arm64/*.whl "${DST}/Python Wheels (MacOS ARM)/"
+          cp "${SRC}"/opendaq-*-python-wheels-linux/*.whl   "${DST}/${WHEELS_LINUX_X64_DIR}/"
+          cp "${SRC}"/opendaq-*-python-wheels-windows/*.whl "${DST}/${WHEELS_WINDOWS_X64_DIR}/"
+          cp "${SRC}"/opendaq-*-python-wheels-macos-x86_64/*.whl "${DST}/${WHEELS_MACOS_X64_DIR}/"
+          cp "${SRC}"/opendaq-*-python-wheels-macos-arm64/*.whl  "${DST}/${WHEELS_MACOS_ARM_DIR}/"
 
           # NuGet
-          cp "${SRC}"/opendaq.net-*/*.nupkg "${DST}/dotNET Bindings/"
+          cp "${SRC}"/opendaq.net-*/*.nupkg "${DST}/${DOTNET_DIR}/"
 
           # Simulator OVA
-          cp "${SRC}"/opendaq-*_device_simulator*/*.ova "${DST}/Simulator/"
+          cp "${SRC}"/opendaq-*_device_simulator*/*.ova "${DST}/${SIMULATOR_DIR}/"
 
           # Documentation
-          cp "${SRC}/API Reference"/*.zip "${DST}/Specifications and documentation/cpp_api_reference.zip"
-          cp "${SRC}"/user_guide.zip "${DST}/Specifications and documentation/"
+          cp "${SRC}/API Reference"/*.zip "${DST}/${DOC_DIR}/cpp_api_reference.zip"
+          cp "${SRC}"/user_guide.zip "${DST}/${DOC_DIR}/"
 
       - name: List organized artifacts
         run: |
           echo '## Artifacts ready for S3 upload' >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          tree -F _artifacts/output | tee -a $GITHUB_STEP_SUMMARY
+          tree -F ${UPLOAD_PATH} | tee -a $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+      
+      # --- Sandbox steps ---
 
-      # --- S3 Upload (uncomment when AWS credentials are configured) ---
+      - name: Configure AWS credentials
+        if: false
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      # - name: Configure AWS credentials
-      #   uses: aws-actions/configure-aws-credentials@v4
-      #   with:
-      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      #     aws-region: ${{ secrets.AWS_REGION }}
+      - name: Upload to S3
+        if: false
+        env:
+          BRANCH: ${{ steps.source-run.outputs.branch }}
+        run: |
+          SRC="${DOWNLOAD_PATH}"
+          DST_URI="s3://${{ env.s3bucket }}/${DST_ROOT_DIR}/${BRANCH}"
 
-      # - name: Upload to S3
-      #   run: |
-      #     aws s3 sync _artifacts/output/ "s3://${S3BUCKET}/" --size-only
+          # SDK packages
+          aws s3 rm "${DST_URI}/${SDK_DIR}/" --recursive --exclude '*' \
+            --include 'opendaq-*_win_*.exe' \
+            --include 'opendaq-*_win_*.zip' \
+            --include 'opendaq-*_linux_*.deb' \
+            --include 'opendaq-*_linux_*.zip' \
+            --include 'opendaq-*-examples.zip'
+          for f in "${SRC}"/opendaq-*_win_*/*.exe \
+                   "${SRC}"/opendaq-*_linux_*/*.deb \
+                   "${SRC}"/opendaq-*-examples*.zip; do
+            aws s3 cp "$f" "${DST_URI}/${SDK_DIR}/"
+          done
+
+          # Python Wheels
+          for whl_dir_src whl_dir_dst in \
+            "opendaq-*-python-wheels-linux"   "${WHEELS_LINUX_X64_DIR}" \
+            "opendaq-*-python-wheels-windows" "${WHEELS_WINDOWS_X64_DIR}" \
+            "opendaq-*-python-wheels-macos-x86_64" "${WHEELS_MACOS_X64_DIR}" \
+            "opendaq-*-python-wheels-macos-arm64"  "${WHEELS_MACOS_ARM_DIR}"; do
+            aws s3 rm "${DST_URI}/${whl_dir_dst}/" --recursive --exclude '*' --include '*.whl'
+            aws s3 cp "${SRC}"/${whl_dir_src}/ "${DST_URI}/${whl_dir_dst}/" --recursive --exclude '*' --include '*.whl'
+          done
+
+          # NuGet
+          aws s3 rm "${DST_URI}/${DOTNET_DIR}/" --recursive --exclude '*' --include '*.nupkg'
+          aws s3 cp "${SRC}"/opendaq.net-*/ "${DST_URI}/${DOTNET_DIR}/" --recursive --exclude '*' --include '*.nupkg'
+
+          # Simulator
+          aws s3 rm "${DST_URI}/${SIMULATOR_DIR}/" --recursive --exclude '*' --include '*.ova'
+          aws s3 cp "${SRC}"/opendaq-*_device_simulator*/ "${DST_URI}/${SIMULATOR_DIR}/" --recursive --exclude '*' --include '*.ova'
+
+          # Documentation
+          aws s3 rm "${DST_URI}/${DOC_DIR}/" --recursive --exclude '*' --include 'cpp_api_reference.zip' --include 'user_guide.zip'
+          aws s3 cp "${SRC}/API Reference/opendaq_cpp_api_reference.zip" "${DST_URI}/${DOC_DIR}/cpp_api_reference.zip"
+          aws s3 cp "${SRC}/user_guide.zip" "${DST_URI}/${DOC_DIR}/"
