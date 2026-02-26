@@ -1,0 +1,46 @@
+name: List CMake Generators
+
+on:
+  pull_request:
+
+jobs:
+  list-generators:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - windows-latest
+          - macos-latest
+          - macos-15-intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: List available CMake generators
+        shell: bash
+        run: |
+          OUTPUT=$(cmake -G 2>&1) || true
+          echo "$OUTPUT"
+          echo "## CMake Generators on ${{ matrix.os }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: List available MSVC toolsets
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installPath = & $vswhere -latest -property installationPath
+          $toolsetsPath = Join-Path $installPath "VC\Tools\MSVC"
+          Write-Host "Installed MSVC toolsets:"
+          Get-ChildItem $toolsetsPath -Directory | ForEach-Object { Write-Host "  $($_.Name)" }
+
+      - name: List compiler versions
+        if: runner.os != 'Windows'
+        run: |
+          echo "=== GCC ==="
+          gcc --version 2>/dev/null || echo "gcc not found"
+          echo ""
+          echo "=== Clang ==="
+          clang --version 2>/dev/null || echo "clang not found"
