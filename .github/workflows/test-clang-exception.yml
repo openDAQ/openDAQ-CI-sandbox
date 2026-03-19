@@ -24,9 +24,15 @@ jobs:
           - os: macos-26-intel
             cc: clang
             cxx: clang++
+          - os: macos-15-intel
+            cc: /usr/bin/clang
+            cxx: /usr/bin/clang++
+          - os: macos-26-intel
+            cc: /usr/bin/clang
+            cxx: /usr/bin/clang++
 
     runs-on: ${{ matrix.os }}
-    name: ${{ matrix.os }}
+    name: ${{ matrix.os }} (${{ matrix.cc }}/${{ matrix.cxx }})
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
