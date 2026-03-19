@@ -5,6 +5,7 @@ on:
 
 jobs:
   list-generators:
+    if: false
     strategy:
       fail-fast: false
       matrix:

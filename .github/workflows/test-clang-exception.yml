@@ -1,0 +1,56 @@
+name: Test Clang exception linking
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            cc: clang
+            cxx: clang++
+          - os: macos-15-intel
+            cc: clang
+            cxx: clang++
+          - os: macos-26
+            cc: clang
+            cxx: clang++
+          - os: macos-26-intel
+            cc: clang
+            cxx: clang++
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }}
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show system info
+        run: |
+          uname -m
+          sw_vers
+          which $CC
+          $CC --version
+          echo "---"
+          which $CXX
+          $CXX --version
+          echo "---"
+          echo "PATH=\"$PATH\""
+
+      - name: Configure
+        run: cmake -B build
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run
+        run: ./build/exception_test
