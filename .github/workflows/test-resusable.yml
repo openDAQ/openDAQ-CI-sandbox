@@ -47,6 +47,10 @@ jobs:
             "configure-preset": "ci-msvc"
           },
           {
+            "match-jobs": ["*-gcc-7-*"],
+            "configure-preset": "ci-legacy-gcc"
+          },
+          {
             "match-jobs": ["macos-*"],
             "configure-preset": "ci-macos"
           }

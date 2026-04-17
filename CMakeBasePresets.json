@@ -346,6 +346,17 @@
             "cacheVariables": {
                 "CMAKE_OSX_DEPLOYMENT_TARGET": "10.15"
             }
+        },
+        {
+            "name": "ci-legacy-gcc",
+            "hidden": true,
+            "inherits": [
+                "ci"
+            ],
+            "cacheVariables": {
+                "DAQMODULES_REF_FB_MODULE_ENABLE_RENDERER": false,
+                "DAQMODULES_BASIC_CSV_RECORDER_MODULE": false
+            }
         }
     ],
     "testPresets": [
