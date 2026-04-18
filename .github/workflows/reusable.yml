@@ -93,6 +93,7 @@ jobs:
               "winget-install": [],
               "pip-install": [],
               "cmd-run-post-package": "",
+              "cmd-ctest-priv": "",
               "timeout-minutes": 120,
               "enable-tests": False,
               "gtest-artifact": "",
@@ -118,12 +119,13 @@ jobs:
 
           # --- macOS configs ---
 
-          _macos_ninja = { 
+          _macos_ninja = {
               **_base,
               "package-managers": ["brew", "pip"],
-              "brew-install-default": ["mono"],              
-              "generator": "Ninja", 
-              "pip-install-default": ["cmake", "ninja"]
+              "brew-install-default": ["mono"],
+              "generator": "Ninja",
+              "pip-install-default": ["cmake", "ninja"],
+              "cmd-sudo": "sudo",
           }
 
           _macos_15_armv8_ninja   = {**_macos_ninja, "runner": "macos-15"}
@@ -170,6 +172,7 @@ jobs:
 
           matrix = []
           for job_name, cfg in jobs_cfg.items():
+              sudo = cfg.get("cmd-sudo") or ""
               build_type = cfg.get("build-type", "Release")
 
               if matches_any(job_name, exclude_jobs):
@@ -196,7 +199,6 @@ jobs:
               # merge and build install commands per package manager
               install_cmds = {}
               for pm in supported_pms:
-                  sudo = cfg.get("cmd-sudo") or ""
                   envs = " ".join(cfg.get(f"cmd-{pm}-envs", []))
 
                   install = cfg.get(f"{pm}-install-default", []) + cfg.get(f"{pm}-install", []) + user_pkgs.get(f"{pm}-install", [])
@@ -213,12 +215,16 @@ jobs:
 
               install_cmds["cmd-run-post-package"] = user_pkgs.get("run", "")
 
-              # find test-preset for this job
+              # find test-preset and run-tests-priv for this job
               test_preset = ""
+              run_tests_priv = False
               for req in cmake_presets:
                   if matches_any(job_name, req.get("match-jobs", ["*"])):
                       test_preset = req.get("test-preset", test_preset)
-
+                      run_tests_priv = req.get("run-tests-priv", run_tests_priv)
+              
+              cmd_run_tests_priv = f"sudo -E " if run_tests_priv and sudo else ""
+              
               enable_tests = bool(test_preset)
               gtest_artifact = upload_pattern.replace("*", f"test-results-{job_name}") if enable_tests else ""
 
@@ -242,6 +248,7 @@ jobs:
                   "timeout-minutes": timeout_minutes,
                   "enable-tests": enable_tests,
                   "gtest-artifact": gtest_artifact,
+                  "cmd-ctest-priv": cmd_run_tests_priv,
                   **install_cmds,
               })
 
@@ -458,7 +465,7 @@ jobs:
         if: matrix.enable-tests
         env:
           GTEST_OUTPUT: xml:${{ steps.setup-gtest.outputs.test-results-dir }}
-        run: ctest --preset ${{ matrix.name }}
+        run: ${{ matrix.cmd-ctest-priv }} ctest --preset ${{ matrix.name }}
 
       - name: Upload test results
         if: ${{ !cancelled() && contains('success failure', steps.test.outcome) && matrix.gtest-artifact != '' }}

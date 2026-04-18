@@ -52,7 +52,8 @@ jobs:
           },
           {
             "match-jobs": ["macos-*"],
-            "configure-preset": "ci-macos"
+            "configure-preset": "ci-macos",
+            "run-tests-priv": true
           }
         ]
 
