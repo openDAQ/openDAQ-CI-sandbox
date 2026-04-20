@@ -24,6 +24,10 @@ jobs:
           {
             "use-python-version": "3.14",
             "pip-install": ["numpy"]
+          },
+          {
+            "match-jobs": ["ubuntu-20.04-*"],
+            "use-python-version": "3.8"
           }
         ]
       timeout: '[{"timeout-minutes": 270}]'
@@ -38,8 +42,8 @@ jobs:
             "configure-preset": "ci-msvc"
           },
           {
-            "match-jobs": ["*-gcc-7-*"],
-            "configure-preset": "ci-legacy-gcc"
+            "match-jobs": ["ubuntu-20.04-*"],
+            "configure-preset": "ci-legacy-compiler"
           },
           {
             "match-jobs": ["macos-*"],

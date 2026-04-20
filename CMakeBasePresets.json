@@ -349,14 +349,15 @@
             }
         },
         {
-            "name": "ci-legacy-gcc",
+            "name": "ci-legacy-compiler",
             "hidden": true,
             "inherits": [
                 "ci"
             ],
             "cacheVariables": {
                 "DAQMODULES_REF_FB_MODULE_ENABLE_RENDERER": false,
-                "DAQMODULES_BASIC_CSV_RECORDER_MODULE": false
+                "DAQMODULES_BASIC_CSV_RECORDER_MODULE": false,
+                "OPENDAQ_PYTHON_VERSION": "3.8"
             }
         }
     ],

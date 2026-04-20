@@ -130,6 +130,7 @@ jobs:
               "brew-install-default": ["mono"],
               "generator": "Ninja",
               "cmd-sudo": "sudo",
+              "fmt-pip-install": "python{ver}{arch} -m pip install --break-system-packages {pkgs}",
           }
 
           _macos_15_armv8_ninja   = {**_macos_ninja, "runner": "macos-15"}
