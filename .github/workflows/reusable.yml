@@ -467,8 +467,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
           architecture: ${{ matrix.python-arch }}
 
+      - name: Setup Python (apt)
+        if: matrix.image == 'ubuntu:20.04' && matrix.python-version != ''
+        shell: bash
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: |
+          apt-get install -y python${PYTHON_VERSION} python${PYTHON_VERSION}-dev python${PYTHON_VERSION}-venv
+
       - name: Setup Python (ppa:deadsnakes/ppa)
-        if: matrix.image != '' && matrix.python-version != '' && matrix.python-arch != 'x86'
+        if: matrix.image != '' && matrix.image != 'ubuntu:20.04' && matrix.python-version != '' && matrix.python-arch != 'x86'
         shell: bash
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}

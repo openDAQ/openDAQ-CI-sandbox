@@ -22,11 +22,11 @@ jobs:
             "apt-install": ["lld", "libx11-dev", "libxi-dev", "libxcursor-dev", "libxrandr-dev", "libgl-dev", "libudev-dev", "libfreetype6-dev"]
           },
           {
-            "use-python-version": "3.14",
-            "pip-install": ["numpy"]
+            "pip-install": ["numpy"],
+            "use-python-version": "3.14"
           },
           {
-            "match-jobs": ["ubuntu-20.04-*"],
+            "match-jobs": ["ubuntu-20.04-*-gcc-7-*", "ubuntu-20.04-*-clang-9-*"],
             "use-python-version": "3.8"
           }
         ]
@@ -42,7 +42,7 @@ jobs:
             "configure-preset": "ci-msvc"
           },
           {
-            "match-jobs": ["ubuntu-20.04-*"],
+            "match-jobs": ["ubuntu-20.04-*-gcc-7-*", "ubuntu-20.04-*-clang-9-*"],
             "configure-preset": "ci-legacy-compiler"
           },
           {
