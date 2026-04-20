@@ -19,20 +19,11 @@ jobs:
         [
           {
             "match-jobs": ["ubuntu-*"],
-            "apt-install": ["lld", "libx11-dev", "libxi-dev", "libxcursor-dev", "libxrandr-dev", "libgl-dev", "libudev-dev", "libfreetype6-dev", "python3-dev"],
-            "pip-install": ["numpy"]
+            "apt-install": ["lld", "libx11-dev", "libxi-dev", "libxcursor-dev", "libxrandr-dev", "libgl-dev", "libudev-dev", "libfreetype6-dev"]
           },
           {
-            "match-jobs": ["macos-*"],
+            "use-python-version": "3.14",
             "pip-install": ["numpy"]
-          },
-          {
-            "match-jobs": ["windows-*"],
-            "pip-install": ["numpy"]
-          },
-          {
-            "match-jobs": ["windows-*-x86-*"],
-            "run": "choco install python --x86 -y && refreshenv"
           }
         ]
       timeout: '[{"timeout-minutes": 270}]'
