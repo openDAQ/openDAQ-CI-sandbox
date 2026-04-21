@@ -426,8 +426,7 @@ jobs:
           ref: ${{ inputs.repo-ref }}
 
       - name: Setup CMake
-        if: matrix.cmd-setup-cmake != ''
-        run: ${{ matrix.cmd-setup-cmake }}
+        uses: jwlawson/actions-setup-cmake@v2
 
       - name: Setup Ninja
         if: matrix.cmd-setup-ninja != ''
