@@ -15,7 +15,6 @@ on:
 
 jobs:
   ci-opendaq:
-    if: false
     name: openDAQ
     uses: ./.github/workflows/reusable.yml
     with:
