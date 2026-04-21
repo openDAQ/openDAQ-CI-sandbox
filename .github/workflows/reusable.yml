@@ -3,6 +3,14 @@ name: Build and Test
 on:
   workflow_call:
     inputs:
+      repo:
+        description: "Repository to checkout, in owner/name format."
+        type: string
+        default: 'openDAQ/openDAQ'
+      repo-ref:
+        description: "Commit, branch or tag of the repository to checkout. If empty, uses the default branch."
+        type: string
+        default: ''
       opendaq-ref:
         description: "openDAQ commit, branch or tag. If empty, uses the opendaq_ref file from the repo."
         type: string
@@ -414,22 +422,8 @@ jobs:
       - name: Checkout openDAQ
         uses: actions/checkout@v6
         with:
-          repository: openDAQ/openDAQ
-          ref: jira/TBBAS-3212-replace-ci-with-reusable
-
-      - name: Checkout CI repo
-        uses: actions/checkout@v6
-        with:
-          path: _ci
-
-      - name: Copy CI presets
-        shell: bash
-        run: |
-          cp _ci/CMakePresets.json CMakePresets.json
-          cp _ci/CMakeBasePresets.json CMakeBasePresets.json
-          cp _ci/CMakeVendorPresets.json CMakeVendorPresets.json
-          rm -rf _ci
-# -------------------------------------
+          repository: ${{ inputs.repo }}
+          ref: ${{ inputs.repo-ref }}
 
       - name: Setup CMake
         if: matrix.cmd-setup-cmake != ''

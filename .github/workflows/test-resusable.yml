@@ -3,18 +3,25 @@ name: CI openDAQ
 on:
   workflow_dispatch:
     inputs:
-      opendaq-ref:
-        description: "openDAQ commit, branch or tag"
+      repo:
+        description: "Repository to checkout, in owner/name format"
         required: false
-        default: ""
+        default: "openDAQ/openDAQ"
+      repo-ref:
+        description: "Commit, branch or tag of the repository to checkout"
+        required: false
+        default: "jira/TBBAS-3212-replace-ci-with-reusable"
   push:
 
 jobs:
-  ci:
+  ci-opendaq:
+    if: false
     name: openDAQ
     uses: ./.github/workflows/reusable.yml
     with:
-      opendaq-ref: ${{ inputs.opendaq-ref || '' }}
+      repo: ${{ inputs.repo || 'openDAQ/openDAQ' }}
+      repo-ref: ${{ inputs.repo-ref || 'jira/TBBAS-3212-replace-ci-with-reusable' }}
+      upload-pattern: 'ci-opendaq-*'
       packages: >
         [
           {
@@ -52,3 +59,96 @@ jobs:
           }
         ]
 
+  ci-asam-cmp:
+    name: ASAM CMP
+    uses: ./.github/workflows/reusable.yml
+    with:
+      repo: openDAQ/ASAM-CMP-Modules
+      upload-pattern: 'ci-asam-cmp-*'
+      packages: >
+        [
+          {
+            "match-jobs": ["ubuntu-*"],
+            "apt-install": ["libpcap-dev"]
+          }
+        ]
+      cmake-presets: >
+        [
+          {
+            "configure-preset": "module",
+            "test-preset": "module-test"
+          }
+        ]
+
+  ci-opcua:
+    name: OPC UA
+    uses: ./.github/workflows/reusable.yml
+    with:
+      repo: openDAQ/OpcUaModules
+      upload-pattern: 'ci-opcua-*'
+      cmake-presets: >
+        [
+          {
+            "configure-preset": "module",
+            "test-preset": "module-test"
+          }
+        ]
+
+  ci-lt-streaming-legacy:
+    name: LT Streaming Legacy
+    uses: ./.github/workflows/reusable.yml
+    with:
+      repo: openDAQ/LTStreamingModulesLegacy
+      upload-pattern: 'ci-lt-streaming-legacy-*'
+      cmake-presets: >
+        [
+          {
+            "configure-preset": "module",
+            "test-preset": "module-test"
+          }
+        ]
+
+  ci-lt-streaming-modern:
+    name: LT Streaming Modern
+    uses: ./.github/workflows/reusable.yml
+    with:
+      repo: openDAQ/LTStreamingModulesModern
+      upload-pattern: 'ci-lt-streaming-modern-*'
+      cmake-presets: >
+        [
+          {
+            "configure-preset": "module",
+            "test-preset": "module-test"
+          }
+        ]
+
+  ci-mqtt-streaming:
+    name: MQTT Streaming
+    uses: ./.github/workflows/reusable.yml
+    with:
+      repo: openDAQ/MQTTStreamingModule
+      upload-pattern: 'ci-mqtt-streaming-*'
+      packages: >
+        [
+          {
+            "match-jobs": ["ubuntu-*"],
+            "apt-install": ["mosquitto"],
+            "run": "mosquitto -d"
+          },
+          {
+            "match-jobs": ["windows-*"],
+            "winget-install": ["EclipseFoundation.Mosquitto"]
+          },
+          {
+            "match-jobs": ["macos-*"],
+            "brew-install": ["mosquitto"],
+            "run": "$(brew --prefix mosquitto)/sbin/mosquitto -d"
+          }
+        ]
+      cmake-presets: >
+        [
+          {
+            "configure-preset": "module",
+            "test-preset": "module-test"
+          }
+        ]
