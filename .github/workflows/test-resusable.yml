@@ -20,7 +20,9 @@ jobs:
     with:
       repo: ${{ inputs.repo || 'openDAQ/openDAQ' }}
       repo-ref: ${{ inputs.repo-ref || 'jira/TBBAS-3212-replace-ci-with-reusable' }}
+      timeout: '[{"timeout-minutes": 270}]'
       upload-pattern: 'ci-opendaq-*'
+      include-jobs: '["windows-*-clang-*"]'
       packages: >
         [
           {
@@ -36,7 +38,6 @@ jobs:
             "use-python-version": "3.8"
           }
         ]
-      timeout: '[{"timeout-minutes": 270}]'
       cmake-presets: >
         [
           {
@@ -64,6 +65,7 @@ jobs:
     with:
       repo: openDAQ/ASAM-CMP-Modules
       upload-pattern: 'ci-asam-cmp-*'
+      include-jobs: '["windows-*-clang-*"]'
       packages: >
         [
           {
@@ -85,6 +87,7 @@ jobs:
     with:
       repo: openDAQ/OpcUaModules
       upload-pattern: 'ci-opcua-*'
+      include-jobs: '["windows-*-clang-*"]'
       cmake-presets: >
         [
           {
@@ -99,6 +102,7 @@ jobs:
     with:
       repo: openDAQ/LTStreamingModulesLegacy
       upload-pattern: 'ci-lt-streaming-legacy-*'
+      include-jobs: '["windows-*-clang-*"]'
       cmake-presets: >
         [
           {
@@ -113,6 +117,7 @@ jobs:
     with:
       repo: openDAQ/LTStreamingModulesModern
       upload-pattern: 'ci-lt-streaming-modern-*'
+      include-jobs: '["windows-*-clang-*"]'
       cmake-presets: >
         [
           {
@@ -127,6 +132,7 @@ jobs:
     with:
       repo: openDAQ/MQTTStreamingModule
       upload-pattern: 'ci-mqtt-streaming-*'
+      include-jobs: '["windows-*-clang-*"]'
       packages: >
         [
           {
