@@ -109,6 +109,7 @@ jobs:
               "cmd-run-post-package": "",
               "cmd-ctest-priv": "",
               "timeout-minutes": 120,
+              "setup-msvc-toolchain": False,
               "enable-tests": False,
               "gtest-artifact": "",
           }
@@ -165,14 +166,13 @@ jobs:
           _windows_2025_x86_64_msvs  = {**_windows_2025_x86_64, "generator": "Visual Studio 17 2022"}
           _windows_2025_x86_64_ninja = {**_windows_2025_x86_64, "generator": "Ninja"}
 
-
           # --- Jobs configs ---
 
           jobs_cfg = {
               "windows-2025-x86_64-msvs-v143-debug":        {**_windows_2025_x86_64_msvs,   "toolset": "v143",                            "build-type": "Debug" },
               "windows-2025-x86-msvs-v143-release":         {**_windows_2025_x86_64_msvs,   "toolset": "v143",                            "build-type": "Release",  "target-arch": "x86" },
 
-              "windows-2025-x86_64-ninja-clang-release":    {**_windows_2025_x86_64_ninja,  "cc": "clang",      "cxx": "clang++",         "build-type": "Release" },
+              "windows-2025-x86_64-ninja-clang-release":    {**_windows_2025_x86_64_ninja,  "cc": "clang",      "cxx": "clang++",         "build-type": "Release",  "setup-msvc-toolchain": True },
 
               "ubuntu-20.04-x86_64-ninja-gcc-7-release":    {**_ubuntu_20_04_x86_64_ninja,  "cc": "gcc-7",      "cxx": "g++-7",           "build-type": "Release",  "apt-install": ["gcc-7", "g++-7"]},
               "ubuntu-20.04-x86_64-ninja-clang-9-release":  {**_ubuntu_20_04_x86_64_ninja,  "cc": "clang-9",    "cxx": "clang++-9",       "build-type": "Release",  "apt-install": ["clang-9"] },
@@ -270,6 +270,8 @@ jobs:
                   if matches_any(job_name, req.get("match-jobs", ["*"])):
                       timeout_minutes = req.get("timeout-minutes", timeout_minutes)
 
+              setup_msvc_toolchain = cfg.get("setup-msvc-toolchain", False)
+
               matrix.append({
                   "name": job_name,
                   "runner": cfg["runner"],
@@ -282,6 +284,7 @@ jobs:
                   "cxx": cfg.get("cxx") or "",
                   "build-type": build_type,
                   "timeout-minutes": timeout_minutes,
+                  "setup-msvc-toolchain": setup_msvc_toolchain,
                   "enable-tests": enable_tests,
                   "gtest-artifact": gtest_artifact,
                   "cmd-ctest-priv": cmd_run_tests_priv,
@@ -499,6 +502,10 @@ jobs:
       - name: Write CI presets
         shell: bash
         run: echo '${{ needs.generate.outputs.cmake-user-presets }}' > CMakeUserPresets.json
+
+      - name: Setup MSVC toolchain
+        if: matrix.setup-msvc-toolchain
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure
         id: configure
