@@ -71,6 +71,10 @@ jobs:
           {
             "match-jobs": ["ubuntu-*"],
             "apt-install": ["libpcap-dev"]
+          },
+          {
+            "match-jobs": ["windows-*-ninja-clang-*"],
+            "choco-install": ["ccache"]
           }
         ]
       cmake-presets: >
