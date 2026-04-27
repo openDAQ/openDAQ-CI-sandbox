@@ -110,6 +110,7 @@ jobs:
               "cmd-ctest-priv": "",
               "timeout-minutes": 120,
               "setup-msvc-toolchain": False,
+              "setup-intel-oneapi": False,
               "enable-tests": False,
               "gtest-artifact": "",
           }
@@ -119,7 +120,7 @@ jobs:
           _ubuntu_guest_x86_64_ninja = {
               **_base,
               "runner": "ubuntu-latest",
-              "bootstrap": "apt-get update && apt-get install -y git python3-pip",
+              "bootstrap": "apt-get update && apt-get install -y git python3-pip curl gnupg ca-certificates",
               "package-managers": ["apt", "pip"],
               "cmd-sudo": "",
               "generator": "Ninja",
@@ -173,6 +174,7 @@ jobs:
               "windows-2025-x86-msvs-v143-release":         {**_windows_2025_x86_64_msvs,   "toolset": "v143",                            "build-type": "Release",  "target-arch": "x86" },
 
               "windows-2025-x86_64-ninja-clang-release":    {**_windows_2025_x86_64_ninja,  "cc": "clang",      "cxx": "clang++",         "build-type": "Release",  "setup-msvc-toolchain": True },
+              "windows-2025-x86_64-ninja-intel-cc-release": {**_windows_2025_x86_64_ninja,  "cc": "icx",        "cxx": "icx",             "build-type": "Release",  "setup-msvc-toolchain": True },
 
               "ubuntu-20.04-x86_64-ninja-gcc-7-release":    {**_ubuntu_20_04_x86_64_ninja,  "cc": "gcc-7",      "cxx": "g++-7",           "build-type": "Release",  "apt-install": ["gcc-7", "g++-7"]},
               "ubuntu-20.04-x86_64-ninja-clang-9-release":  {**_ubuntu_20_04_x86_64_ninja,  "cc": "clang-9",    "cxx": "clang++-9",       "build-type": "Release",  "apt-install": ["clang-9"] },
@@ -180,6 +182,7 @@ jobs:
               "ubuntu-24.04-x86_64-ninja-gcc-14-debug":     {**_ubuntu_24_04_x86_64_ninja,  "cc": "gcc-14",     "cxx": "g++-14",          "build-type": "Debug",   "apt-install": ["gcc-14", "g++-14"] },
               "ubuntu-24.04-x86_64-ninja-gcc-14-release":   {**_ubuntu_24_04_x86_64_ninja,  "cc": "gcc-14",     "cxx": "g++-14",          "build-type": "Release",  "apt-install": ["gcc-14", "g++-14"] },
               "ubuntu-24.04-x86_64-ninja-clang-18-release": {**_ubuntu_24_04_x86_64_ninja,  "cc": "clang-18",   "cxx": "clang++-18",      "build-type": "Release",  "apt-install": ["clang-18"] },
+              "ubuntu-24.04-x86_64-ninja-intel-cc-release": {**_ubuntu_24_04_x86_64_ninja,  "cc": "icx",        "cxx": "icpx",            "build-type": "Release"},
 
               "macos-26-x86_64-ninja-appleclang-debug":     {**_macos_26_x86_64_ninja,      **_apple_clang_cc,  **_apple_clang_cxx,        "build-type": "Debug"},
               "macos-26-armv8-ninja-appleclang-release":    {**_macos_26_armv8_ninja,       **_apple_clang_cc,  **_apple_clang_cxx,        "build-type": "Release"},
@@ -271,6 +274,7 @@ jobs:
                       timeout_minutes = req.get("timeout-minutes", timeout_minutes)
 
               setup_msvc_toolchain = cfg.get("setup-msvc-toolchain", False)
+              setup_intel_oneapi = cfg.get("setup-intel-oneapi", False) or cfg.get("cc") in ("icx", "icpx")
 
               matrix.append({
                   "name": job_name,
@@ -285,6 +289,7 @@ jobs:
                   "build-type": build_type,
                   "timeout-minutes": timeout_minutes,
                   "setup-msvc-toolchain": setup_msvc_toolchain,
+                  "setup-intel-oneapi": setup_intel_oneapi,
                   "enable-tests": enable_tests,
                   "gtest-artifact": gtest_artifact,
                   "cmd-ctest-priv": cmd_run_tests_priv,
@@ -438,6 +443,8 @@ jobs:
 # -------------------------------------
       - name: Setup CMake
         uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: 4.3.2
 
       - name: Setup Ninja
         if: matrix.generator == 'Ninja'
@@ -506,6 +513,10 @@ jobs:
       - name: Setup MSVC toolchain
         if: matrix.setup-msvc-toolchain
         uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup Intel oneAPI
+        if: matrix.setup-intel-oneapi
+        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/setup-oneapi@test/resuable-opendaq
 
       - name: Configure
         id: configure

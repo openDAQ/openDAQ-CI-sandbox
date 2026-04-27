@@ -1,0 +1,155 @@
+name: Setup Intel oneAPI
+description: Install Intel oneAPI C++ compiler (icx) and source environment
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve oneAPI paths
+      id: paths
+      shell: bash
+      run: |
+        installer_url='https://registrationcenter-download.intel.com/akdlm/IRC_NAS/18a420c5-bfb7-4eb0-b04a-41a4fc7cc3b3/intel-oneapi-base-toolkit-2025.3.2.20.exe'
+        version=$(basename "$installer_url" | sed -E 's/intel-oneapi-base-toolkit-([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        case "$RUNNER_OS" in
+          Windows)
+            {
+              echo 'install-dir=C:\Program Files (x86)\Intel\oneAPI'
+              echo 'setvars=C:\Program Files (x86)\Intel\oneAPI\setvars.bat'
+              echo "installer-url=$installer_url"
+            } >> "$GITHUB_OUTPUT"
+            ;;
+          Linux)
+            {
+              echo 'install-dir=/opt/intel/oneapi'
+              echo 'setvars=/opt/intel/oneapi/setvars.sh'
+            } >> "$GITHUB_OUTPUT"
+            ;;
+          *)
+            echo "::error::Unsupported runner OS: $RUNNER_OS (only Linux and Windows are supported)"
+            exit 1
+            ;;
+        esac
+
+    - name: Cache oneAPI
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.paths.outputs.install-dir }}
+        key: oneapi-${{ runner.os }}-${{ steps.paths.outputs.version }}
+
+    - name: Install Intel oneAPI (Linux)
+      if: runner.os == 'Linux' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        VERSION: ${{ steps.paths.outputs.version }}
+      run: |
+        VERSION_APT=$(echo "$VERSION" | cut -d. -f1,2)
+        curl -fsSL https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+          | gpg --dearmor > /usr/share/keyrings/oneapi-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+          > /etc/apt/sources.list.d/oneAPI.list
+        apt-get update
+        apt-get install -y intel-oneapi-compiler-dpcpp-cpp-${VERSION_APT}
+
+    - name: Install Intel oneAPI (Windows)
+      if: runner.os == 'Windows' && steps.cache.outputs.cache-hit != 'true'
+      shell: pwsh
+      env:
+        INSTALLER_URL: ${{ steps.paths.outputs.installer-url }}
+      run: |
+        $url = $env:INSTALLER_URL
+        $installer = "$env:TEMP\oneapi_installer.exe"
+        $extract = "$env:TEMP\oneapi_extracted"
+
+        Write-Host "Downloading from $url"
+        curl.exe -L -o $installer $url --retry 5 --retry-delay 5 --fail --show-error
+        if ($LASTEXITCODE -ne 0) { Write-Error "Download failed (exit $LASTEXITCODE)"; exit 1 }
+
+        Write-Host "Extracting installer"
+        $proc = Start-Process -Wait -PassThru -FilePath $installer -ArgumentList "-s", "-x", "-f", $extract, "--log", "extract.log"
+        if ($proc.ExitCode -ne 0) {
+            Write-Error "Extraction failed (exit $($proc.ExitCode))"
+            Get-Content extract.log -ErrorAction SilentlyContinue
+            exit 1
+        }
+
+        Write-Host "Installing intel.oneapi.win.cpp-dpcpp-common"
+        $proc = Start-Process -Wait -PassThru -FilePath "$extract\bootstrapper.exe" -ArgumentList `
+          "-s", "--action", "install", "--eula=accept", `
+          "--components=intel.oneapi.win.cpp-dpcpp-common", `
+          "-p=NEED_VS2017_INTEGRATION=0", `
+          "-p=NEED_VS2019_INTEGRATION=0", `
+          "-p=NEED_VS2022_INTEGRATION=0", `
+          "--log-dir=."
+        if ($proc.ExitCode -ne 0) {
+            Write-Error "Installation failed (exit $($proc.ExitCode))"
+            Get-ChildItem *.log | ForEach-Object { Write-Host "=== $($_.Name) ==="; Get-Content $_ }
+            exit 1
+        }
+
+        Remove-Item -Force $installer -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force $extract -ErrorAction SilentlyContinue
+
+    - name: Source oneAPI environment
+      shell: python3 {0}
+      env:
+        SOURCE_SCRIPT: ${{ steps.paths.outputs.setvars }}
+      run: |
+        import subprocess, os, sys
+
+        script = os.environ["SOURCE_SCRIPT"]
+        print(f"::group::Source script: {script}")
+        print(f"Exists: {os.path.exists(script)}")
+        ext = os.path.splitext(script)[1].lower()
+        if ext == ".bat":
+            cmd = f'"{script}" --force && set'
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        elif ext == ".sh":
+            cmd = ["bash", "-c", f'source "{script}" --force && env']
+            result = subprocess.run(cmd, capture_output=True, text=True)
+        else:
+            raise SystemExit(f"::error::Unsupported script extension: {ext}")
+        print(f"Exit code: {result.returncode}")
+        if result.stderr:
+            print(f"STDERR:\n{result.stderr}")
+        print("::endgroup::")
+
+        if result.returncode != 0:
+            sys.exit(f"::error::source script failed with exit {result.returncode}")
+
+        before = dict(os.environ)
+        written = []
+        with open(os.environ["GITHUB_ENV"], "a") as f:
+            for line in result.stdout.splitlines():
+                if "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                if not v or k.startswith("_"):
+                    continue
+                if before.get(k) == v:
+                    continue
+                f.write(f"{k}={v}\n")
+                written.append(k)
+        print(f"::group::Env vars written to GITHUB_ENV ({len(written)})")
+        for k in written:
+            print(k)
+        print("::endgroup::")
+
+    - name: Verify icx
+      shell: bash
+      env:
+        INSTALL_DIR: ${{ steps.paths.outputs.install-dir }}
+      run: |
+        # convert backslashes to forward slashes for bash
+        DIR=$(echo "$INSTALL_DIR" | sed 's|\\|/|g')/compiler
+        echo "=== $DIR ==="
+        ls -la "$DIR" 2>/dev/null || echo "(not found)"
+        echo "=== compiler/<ver>/bin ==="
+        ls "$DIR"/*/bin/ 2>/dev/null | head -20 || echo "(not found)"
+        echo "=== which ==="
+        which icx || true
+        which icpx || true
+        echo "=== version ==="
+        icx --version || true
