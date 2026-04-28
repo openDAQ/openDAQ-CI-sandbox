@@ -197,6 +197,8 @@ jobs:
 
               "windows-2025-x86_64-ninja-clang-release":    {**_windows_2025_x86_64_ninja,  "cc": "clang",      "cxx": "clang++",         "build-type": "Release",  "setup-msvc-toolchain": True },
               "windows-2025-x86_64-ninja-intel-cc-release": {**_windows_2025_x86_64_ninja,  "cc": "icx",        "cxx": "icx",             "build-type": "Release",  "setup-msvc-toolchain": True, "setup-intel-cc": "windows-intel-cc" },
+              "windows-2025-x86_64-ninja-intel-cc-cl-release": {**_windows_2025_x86_64_ninja,  "cc": "icx-cl",        "cxx": "icx-cl",             "build-type": "Release",  "setup-msvc-toolchain": True, "setup-intel-cc": "windows-intel-cc" },
+              "windows-2025-x86_64-ninja-intel-cc-icpx-release": {**_windows_2025_x86_64_ninja,  "cc": "icx",        "cxx": "icpx",             "build-type": "Release",  "setup-msvc-toolchain": True, "setup-intel-cc": "windows-intel-cc" },
 
               "ubuntu-20.04-x86_64-ninja-gcc-7-release":    {**_ubuntu_20_04_x86_64_ninja,  "cc": "gcc-7",      "cxx": "g++-7",           "build-type": "Release",  "apt-install": ["gcc-7", "g++-7"]},
               "ubuntu-20.04-x86_64-ninja-clang-9-release":  {**_ubuntu_20_04_x86_64_ninja,  "cc": "clang-9",    "cxx": "clang++-9",       "build-type": "Release",  "apt-install": ["clang-9"] },
