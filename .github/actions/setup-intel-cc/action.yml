@@ -1,0 +1,56 @@
+name: Setup Intel C/C++ compiler
+description: Install Intel oneAPI C/C++ compiler (icx/icpx) from offline installer via oneapi-src/oneapi-ci scripts
+
+inputs:
+  oneapi-ci-ref:
+    description: Ref of oneapi-src/oneapi-ci to checkout
+    default: master
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout oneapi-ci scripts
+      uses: actions/checkout@v4
+      with:
+        repository: oneapi-src/oneapi-ci
+        ref: ${{ inputs.oneapi-ci-ref }}
+        path: .oneapi-ci
+
+    - name: Install Intel oneAPI and source environment
+      shell: python3 {0}
+      run: |
+        import os, platform, subprocess
+
+        config = {
+            "Linux":   ("https://registrationcenter-download.intel.com/akdlm/IRC_NAS/99f4837a-25b7-425d-a897-60af022676ea/intel-oneapi-base-toolkit-2025.3.2.21.sh",
+                        "intel.oneapi.lin.dpcpp-cpp-compiler",
+                        "install_linux.sh",
+                        "/opt/intel/oneapi/setvars.sh",
+                        '. "{setvars}" --force && env'),
+            "Windows": ("https://registrationcenter-download.intel.com/akdlm/IRC_NAS/18a420c5-bfb7-4eb0-b04a-41a4fc7cc3b3/intel-oneapi-base-toolkit-2025.3.2.20.exe",
+                        "intel.oneapi.win.cpp-dpcpp-common",
+                        "install_windows.bat",
+                        r"C:\Program Files (x86)\Intel\oneAPI\setvars.bat",
+                        '"{setvars}" --force && set'),
+        }
+
+        os_name = platform.system()
+        url, components, install_script, setvars, setvars_cmd = config[os_name]
+
+        subprocess.run([f".oneapi-ci/scripts/{install_script}", url, components],
+                       shell=(os_name == "Windows"), check=True)
+
+        result = subprocess.run(setvars_cmd.format(setvars=setvars),
+                                shell=True, capture_output=True, text=True, check=True)
+
+        with open(os.environ["GITHUB_ENV"], "a") as f:
+            for line in result.stdout.splitlines():
+                if "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                if v and not k.startswith("_") and os.environ.get(k) != v:
+                    f.write(f"{k}={v}\n")
+
+    - name: Verify icx
+      shell: bash
+      run: icx --version

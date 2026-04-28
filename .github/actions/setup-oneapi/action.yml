@@ -8,6 +8,7 @@ runs:
       id: paths
       shell: bash
       run: |
+        #              https://registrationcenter-download.intel.com/akdlm/IRC_NAS/99f4837a-25b7-425d-a897-60af022676ea/intel-oneapi-base-toolkit-2025.3.2.21.sh
         installer_url='https://registrationcenter-download.intel.com/akdlm/IRC_NAS/18a420c5-bfb7-4eb0-b04a-41a4fc7cc3b3/intel-oneapi-base-toolkit-2025.3.2.20.exe'
         version=$(basename "$installer_url" | sed -E 's/intel-oneapi-base-toolkit-([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
 
