@@ -22,7 +22,7 @@ jobs:
       repo-ref: ${{ inputs.repo-ref || 'jira/TBBAS-3212-replace-ci-with-reusable' }}
       timeout: '[{"timeout-minutes": 270}]'
       upload-pattern: 'ci-opendaq-*'
-      include-jobs: '["windows-*-intel-cc-*", "ubuntu-*-intel-cc-*"]'
+      # include-jobs: '["windows-*-intel-cc-*", "ubuntu-*-intel-cc-*"]'
       packages: >
         [
           {

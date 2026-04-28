@@ -112,6 +112,7 @@ jobs:
               "setup-msvc-toolchain": False,
               "enable-tests": False,
               "gtest-artifact": "",
+              "apt-repos-ppa": [],
           }
 
           # --- Ubuntu configs ---
@@ -133,6 +134,7 @@ jobs:
               **_ubuntu_guest_x86_64_ninja,
               "image": "ubuntu:24.04",
               "fmt-pip-install": "python{ver}{arch} -m pip install --break-system-packages {pkgs}",
+              "allow-python-ppa": True,
           }
 
           # --- macOS configs ---
@@ -197,8 +199,6 @@ jobs:
 
               "windows-2025-x86_64-ninja-clang-release":    {**_windows_2025_x86_64_ninja,  "cc": "clang",      "cxx": "clang++",         "build-type": "Release",  "setup-msvc-toolchain": True },
               "windows-2025-x86_64-ninja-intel-cc-release": {**_windows_2025_x86_64_ninja,  "cc": "icx",        "cxx": "icx",             "build-type": "Release",  "setup-msvc-toolchain": True, "setup-intel-cc": "windows-intel-cc" },
-              "windows-2025-x86_64-ninja-intel-cc-cl-release": {**_windows_2025_x86_64_ninja,  "cc": "icx-cl",        "cxx": "icx-cl",             "build-type": "Release",  "setup-msvc-toolchain": True, "setup-intel-cc": "windows-intel-cc" },
-              "windows-2025-x86_64-ninja-intel-cc-icpx-release": {**_windows_2025_x86_64_ninja,  "cc": "icx",        "cxx": "icpx",             "build-type": "Release",  "setup-msvc-toolchain": True, "setup-intel-cc": "windows-intel-cc" },
 
               "ubuntu-20.04-x86_64-ninja-gcc-7-release":    {**_ubuntu_20_04_x86_64_ninja,  "cc": "gcc-7",      "cxx": "g++-7",           "build-type": "Release",  "apt-install": ["gcc-7", "g++-7"]},
               "ubuntu-20.04-x86_64-ninja-clang-9-release":  {**_ubuntu_20_04_x86_64_ninja,  "cc": "clang-9",    "cxx": "clang++-9",       "build-type": "Release",  "apt-install": ["clang-9"] },
@@ -225,6 +225,12 @@ jobs:
               build_type = cfg.get("build-type", "Release")
               cc  = cfg.get("cc") or ""
               cxx = cfg.get("cxx") or ""
+              
+              apt_supported = "apt" in cfg.get("package-managers", [])
+              apt_repos_ppa = list(cfg.get("apt-repos-ppa") or []) if apt_supported else None
+
+              runner = cfg["runner"]
+              image = cfg.get("image") or ""
 
               if not matches_any(job_name, include_jobs):
                   print(f"Matrix job '{job_name}': skipped, does not match 'include-jobs' input")
@@ -257,10 +263,22 @@ jobs:
                   user_pkgs["run"] = req.get("run", user_pkgs.get("run", ""))
                   python_version = req.get("use-python-version", python_version)
 
+              # Python via apt: deadsnakes (+ ensurepip) on allow-python-ppa configs, else system repos.
+              cmd_ensurepip = ""
+              if python_version and "apt" in supported_pms:
+                  user_pkgs.setdefault("apt-install", []).extend([
+                      f"python{python_version}",
+                      f"python{python_version}-dev",
+                      f"python{python_version}-venv",
+                  ])
+                  if cfg.get("allow-python-ppa"):
+                      apt_repos_ppa.append("deadsnakes/ppa")
+                      cmd_ensurepip = f"python{python_version} -m ensurepip || true"
+
               python_arch = "x86" if cfg.get("target-arch", "") == "x86" else ""
               py_ver = python_version or "3"
               py_arch = "-32" if python_arch == "x86" else ""
-              
+
               # merge and build install commands per package manager
               install_cmds = {}
               for pm in supported_pms:
@@ -301,6 +319,14 @@ jobs:
 
               setup_msvc_toolchain = cfg.get("setup-msvc-toolchain", False)
 
+              # Materialize PPA-setup command (only when apt is supported and any PPA is requested)
+              cmd_install_ppas = ""
+              if apt_supported and apt_repos_ppa:
+                  parts = [f"{sudo} apt-get install -y software-properties-common"]
+                  parts += [f"{sudo} add-apt-repository -y ppa:{p}" for p in apt_repos_ppa]
+                  parts += [f"{sudo} apt-get update"]
+                  cmd_install_ppas = " && ".join(parts)
+
               # Materialize Intel oneAPI commands if 'setup-intel-cc' is set
               intel_cc_url = ""
               intel_cc_extract_cmd = ""
@@ -318,8 +344,8 @@ jobs:
 
               matrix.append({
                   "name": job_name,
-                  "runner": cfg["runner"],
-                  "image": cfg.get("image") or "",
+                  "runner": runner,
+                  "image": image,
                   "bootstrap": cfg.get("bootstrap") or "",
                   "generator": cfg["generator"],
                   "toolset": cfg.get("toolset") or "",
@@ -329,6 +355,8 @@ jobs:
                   "build-type": build_type,
                   "timeout-minutes": timeout_minutes,
                   "setup-msvc-toolchain": setup_msvc_toolchain,
+                  "cmd-install-ppas":     cmd_install_ppas,
+                  "cmd-ensurepip":        cmd_ensurepip,
                   "intel-cc-url":         intel_cc_url,
                   "intel-cc-extract-cmd": intel_cc_extract_cmd,
                   "intel-cc-install-cmd": intel_cc_install_cmd,
@@ -498,6 +526,10 @@ jobs:
         shell: bash
         run: echo "${{ inputs.opendaq-ref }}" > opendaq_ref
 
+      - name: Setup PPA repositories
+        if: matrix.cmd-install-ppas != ''
+        run: ${{ matrix.cmd-install-ppas }}
+
       - name: Install dependencies (apt)
         if: matrix.cmd-install-apt != ''
         run: ${{ matrix.cmd-install-apt }}
@@ -514,32 +546,16 @@ jobs:
         if: matrix.cmd-install-winget != ''
         run: ${{ matrix.cmd-install-winget }}
 
-      - name: Setup Python (github.com/actions/setup-python)
+      - name: Setup Python (GitHub Actions)
         if: matrix.image == '' && matrix.python-version != ''
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           architecture: ${{ matrix.python-arch }}
 
-      - name: Setup Python (apt)
-        if: matrix.image == 'ubuntu:20.04' && matrix.python-version != ''
-        shell: bash
-        env:
-          PYTHON_VERSION: ${{ matrix.python-version }}
-        run: |
-          apt-get install -y python${PYTHON_VERSION} python${PYTHON_VERSION}-dev python${PYTHON_VERSION}-venv
-
-      - name: Setup Python (ppa:deadsnakes/ppa)
-        if: matrix.image != '' && matrix.image != 'ubuntu:20.04' && matrix.python-version != '' && matrix.python-arch != 'x86'
-        shell: bash
-        env:
-          PYTHON_VERSION: ${{ matrix.python-version }}
-        run: |
-          apt-get install -y software-properties-common
-          add-apt-repository -y ppa:deadsnakes/ppa
-          apt-get update
-          apt-get install -y python${PYTHON_VERSION} python${PYTHON_VERSION}-dev python${PYTHON_VERSION}-venv
-          python${PYTHON_VERSION} -m ensurepip
+      - name: Setup Python (ensurepip)
+        if: matrix.cmd-ensurepip != ''
+        run: ${{ matrix.cmd-ensurepip }}
 
       - name: Install dependencies (pip)
         if: matrix.cmd-install-pip != ''
@@ -596,9 +612,7 @@ jobs:
               updated = after[path_key].split(os.pathsep)
               new_entries = [p for p in updated if p and p not in orig]
               with open(os.environ["GITHUB_PATH"], "a") as f:
-                  for p in new_entries:
-                      print(p)
-                      f.write(f"{p}\n")
+                  f.writelines(f"{p}\n" for p in new_entries)
 
           internals = {"SHLVL", "=ExitCode", "=ExitCodeAscii"}
           with open(os.environ["GITHUB_ENV"], "a") as f:
@@ -606,16 +620,7 @@ jobs:
                   if k == path_key or not v or k.startswith("_") or k in internals:
                       continue
                   if os.environ.get(k) != v:
-                      print(f"{k}={v}")
                       f.write(f"{k}={v}\n")
-
-      - name: Verify Intel C/C++ compilers
-        if: matrix.source-cmd
-        shell: bash
-        run: |
-          icx --version    || echo "icx: not found"
-          icpx --version   || echo "icpx: not found"
-          icx-cl --version || echo "icx-cl: not found"
 
       - name: Configure
         id: configure
