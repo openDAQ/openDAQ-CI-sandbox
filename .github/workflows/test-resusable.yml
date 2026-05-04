@@ -64,16 +64,11 @@ jobs:
             "test-preset": "run_tests"
           },
           {
-            "match-jobs": ["windows-*-msvs-*"],
-            "configure-preset": "ci-msvc"
-          },
-          {
             "match-jobs": ["ubuntu-20.04-*-clang-9-*"],
             "configure-preset": "ci-legacy-compiler"
           },
           {
             "match-jobs": ["macos-*"],
-            "configure-preset": "ci-macos",
             "run-tests-priv": true
           },
           {
