@@ -505,6 +505,11 @@ jobs:
       - name: Bootstrap
         if: matrix.bootstrap != ''
         run: ${{ matrix.bootstrap }}
+
+      - name: Setup Git
+        if: matrix.image != ''
+        shell: bash
+        run: git config --global --add safe.directory '*'
 # -------------------------------------
       - name: Checkout openDAQ
         uses: actions/checkout@v6
