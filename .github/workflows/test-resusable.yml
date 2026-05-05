@@ -22,25 +22,25 @@ jobs:
       repo-ref: ${{ inputs.repo-ref || 'jira/TBBAS-3212-replace-ci-with-reusable' }}
       timeout: '[{"timeout-minutes": 270}]'
       upload-pattern: 'ci-opendaq-*'
-      # include-jobs: >
-      #   [
-      #     "windows-2025-x86_64-msvs-v143-debug",
-      #     "windows-2025-x86-msvs-v143-release",
-      #     "windows-2025-x86_64-ninja-clang-release",
-      #     "windows-2025-x86_64-ninja-intel-cc-release",
-      #     "ubuntu-20.04-x86-ninja-gcc-7-release",
-      #     "ubuntu-20.04-x86_64-ninja-clang-9-release",
-      #     "ubuntu-24.04-x86_64-ninja-gcc-14-debug",
-      #     "ubuntu-24.04-x86_64-ninja-gcc-14-release",
-      #     "ubuntu-24.04-x86_64-ninja-clang-18-release",
-      #     "macos-26-x86_64-ninja-appleclang-debug",
-      #     "macos-26-armv8-ninja-appleclang-release",
-      #     "macos-15-x86_64-ninja-appleclang-release"
-      #   ]
       include-jobs: >
         [
-          "ubuntu-20.04-x86-ninja-gcc-7-release"
+          "windows-2025-x86_64-msvs-v143-debug",
+          "windows-2025-x86-msvs-v143-release",
+          "windows-2025-x86_64-ninja-clang-release",
+          "windows-2025-x86_64-ninja-intel-cc-release",
+          "ubuntu-20.04-x86-ninja-gcc-7-release",
+          "ubuntu-20.04-x86_64-ninja-clang-9-release",
+          "ubuntu-24.04-x86_64-ninja-gcc-14-debug",
+          "ubuntu-24.04-x86_64-ninja-gcc-14-release",
+          "ubuntu-24.04-x86_64-ninja-clang-18-release",
+          "macos-26-x86_64-ninja-appleclang-debug",
+          "macos-26-armv8-ninja-appleclang-release",
+          "macos-15-x86_64-ninja-appleclang-release"
         ]
+      # include-jobs: >
+      #   [
+      #     "ubuntu-20.04-x86-ninja-gcc-7-release"
+      #   ]
       packages: >
         [
           {
@@ -68,20 +68,39 @@ jobs:
             "test-preset": "run_tests"
           },
           {
-            "match-jobs": ["ubuntu-20.04-*-clang-9-*"],
-            "configure-preset": "ci-legacy-compiler"
+            "match-jobs": ["ubuntu-20.04-*-clang-9-*", "ubuntu-20.04-x86-*"],
+            "cache-variables": {
+              "DAQMODULES_REF_FB_MODULE_ENABLE_RENDERER": false,
+              "DAQMODULES_BASIC_CSV_RECORDER_MODULE": false,
+              "OPENDAQ_PYTHON_VERSION": "3.8"
+            }
           },
           {
-            "match-jobs": ["macos-*"],
-            "run-tests-priv": true
-          },
-          {
-            "match-jobs": ["*-intel-cc-*"],
-            "configure-preset": "ci-no-bindings"
+            "match-jobs": ["*-intel-cc-*", "ubuntu-20.04-x86-*"],
+            "cache-variables": {
+              "OPENDAQ_GENERATE_PYTHON_BINDINGS": false,
+              "OPENDAQ_GENERATE_CSHARP_BINDINGS": false
+            }
           },
           {
             "match-jobs": ["ubuntu-20.04-x86-*"],
-            "configure-preset": "ci-legacy-compiler-x86"
+            "cache-variables": {
+              "OPENDAQ_FORCE_COMPILE_32BIT": true,
+              "CMAKE_CXX_FLAGS": "-Wno-error=shift-count-overflow"
+            }
+          },
+          {
+            "match-jobs": ["macos-*"],
+            "run-tests-priv": true,
+            "cache-variables": {
+              "CMAKE_OSX_DEPLOYMENT_TARGET": "10.15"
+            }
+          },
+          {
+            "match-jobs": ["windows-*-msvs-*"],
+            "cache-variables": {
+              "OPENDAQ_MSVC_SINGLE_PROCESS_BUILD": true
+            }
           }
         ]
 

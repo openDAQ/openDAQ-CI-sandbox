@@ -301,10 +301,10 @@ jobs:
               # find test-preset and run-tests-priv for this job
               test_preset = ""
               run_tests_priv = False
-              for req in cmake_presets:
-                  if matches_any(job_name, req.get("match-jobs", ["*"])):
-                      test_preset = req.get("test-preset", test_preset)
-                      run_tests_priv = req.get("run-tests-priv", run_tests_priv)
+              for entry in cmake_presets:
+                  if matches_any(job_name, entry.get("match-jobs", ["*"])):
+                      test_preset = entry.get("test-preset", test_preset)
+                      run_tests_priv = entry.get("run-tests-priv", run_tests_priv)
               
               cmd_run_tests_priv = f"sudo -E " if run_tests_priv and sudo else ""
               
@@ -402,10 +402,12 @@ jobs:
               # find matching cmake-presets config
               configure_preset = ""
               test_preset = ""
-              for req in cmake_presets:
-                  if any(fnmatch(name, p) for p in req.get("match-jobs", ["*"])):
-                      configure_preset = req.get("configure-preset", configure_preset)
-                      test_preset = req.get("test-preset", test_preset)
+              cache_vars = {}
+              for entry in cmake_presets:
+                  if any(fnmatch(name, p) for p in entry.get("match-jobs", ["*"])):
+                      configure_preset = entry.get("configure-preset", configure_preset)
+                      test_preset = entry.get("test-preset", test_preset)
+                      cache_vars.update(entry.get("cache-variables", {}))
 
               user_presets["configurePresets"].append({
                   "name": name,
@@ -415,6 +417,7 @@ jobs:
                   **({"architecture": architecture} if architecture else {}),
                   "binaryDir": "$" + "{sourceDir}" + f"/{build_dir}",
                   "cacheVariables": {
+                      **cache_vars,
                       **({"CMAKE_BUILD_TYPE": build_type} if build_type else {}),
                       **({"CMAKE_C_COMPILER": cc} if cc else {}),
                       **({"CMAKE_CXX_COMPILER": cxx} if cxx else {}),
