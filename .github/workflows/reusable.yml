@@ -160,7 +160,7 @@ jobs:
 
           _windows_2025_x86_64 = {
               **_base,
-              "runner": "windows-2025",
+              "runner": "windows-2022",
               "package-managers": ["choco", "winget", "pip"],
               "fmt-pip-install": "py -{ver}{arch} -m pip install {pkgs}",
               "setup-msvc-toolchain": True,
