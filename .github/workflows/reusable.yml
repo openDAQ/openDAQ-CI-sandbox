@@ -143,6 +143,11 @@ jobs:
               "fmt-pip-install": "python{ver}{arch} -m pip install --break-system-packages {pkgs}",
               "allow-python-ppa": True,
           }
+          _ubuntu_24_04_x86_ninja = {
+              **_ubuntu_24_04_x86_64_ninja,
+              "target-arch": "x86",
+              "bootstrap": "dpkg --add-architecture i386 && apt-get update && apt-get install -y git python3-pip curl gnupg ca-certificates",
+          }
 
           # --- macOS configs ---
 
@@ -211,6 +216,8 @@ jobs:
               "ubuntu-20.04-x86-ninja-gcc-7-release":       {**_ubuntu_20_04_x86_ninja,     "cc": "gcc-7",      "cxx": "g++-7",           "build-type": "Release",  "apt-install": ["gcc-7", "g++-7", "gcc-7-multilib", "g++-7-multilib"] },
               "ubuntu-20.04-x86_64-ninja-clang-9-release":  {**_ubuntu_20_04_x86_64_ninja,  "cc": "clang-9",    "cxx": "clang++-9",       "build-type": "Release",  "apt-install": ["clang-9"] },
 
+              "ubuntu-24.04-x86-ninja-gcc-13-release":      {**_ubuntu_24_04_x86_ninja,     "cc": "gcc-13",     "cxx": "g++-13",          "build-type": "Release",  "apt-install": ["gcc-13", "g++-13", "gcc-13-multilib", "g++-13-multilib"] },
+              "ubuntu-24.04-x86-ninja-gcc-14-release":      {**_ubuntu_24_04_x86_ninja,     "cc": "gcc-14",     "cxx": "g++-14",          "build-type": "Release",  "apt-install": ["gcc-14", "g++-14", "gcc-14-multilib", "g++-14-multilib"] },
               "ubuntu-24.04-x86_64-ninja-gcc-14-debug":     {**_ubuntu_24_04_x86_64_ninja,  "cc": "gcc-14",     "cxx": "g++-14",          "build-type": "Debug",   "apt-install": ["gcc-14", "g++-14"] },
               "ubuntu-24.04-x86_64-ninja-gcc-14-release":   {**_ubuntu_24_04_x86_64_ninja,  "cc": "gcc-14",     "cxx": "g++-14",          "build-type": "Release",  "apt-install": ["gcc-14", "g++-14"] },
               "ubuntu-24.04-x86_64-ninja-clang-18-release": {**_ubuntu_24_04_x86_64_ninja,  "cc": "clang-18",   "cxx": "clang++-18",      "build-type": "Release",  "apt-install": ["clang-18"] },

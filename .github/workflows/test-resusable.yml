@@ -30,6 +30,8 @@ jobs:
       #     "windows-2025-x86_64-ninja-intel-cc-release",
       #     "ubuntu-20.04-x86-ninja-gcc-7-release",
       #     "ubuntu-20.04-x86_64-ninja-clang-9-release",
+      #     "ubuntu-24.04-x86-ninja-gcc-13-release",
+      #     "ubuntu-24.04-x86-ninja-gcc-14-release",
       #     "ubuntu-24.04-x86_64-ninja-gcc-14-debug",
       #     "ubuntu-24.04-x86_64-ninja-gcc-14-release",
       #     "ubuntu-24.04-x86_64-ninja-clang-18-release",
@@ -39,7 +41,9 @@ jobs:
       #   ]
       include-jobs: >
         [
-          "ubuntu-20.04-x86-ninja-gcc-7-release"
+          "ubuntu-20.04-x86-ninja-gcc-7-release",
+          "ubuntu-24.04-x86-ninja-gcc-13-release",
+          "ubuntu-24.04-x86-ninja-gcc-14-release"
         ]
       packages: >
         [
@@ -76,16 +80,21 @@ jobs:
             }
           },
           {
-            "match-jobs": ["*-intel-cc-*", "ubuntu-20.04-x86-*"],
+            "match-jobs": ["*-intel-cc-*", "ubuntu-*-x86-*"],
             "cache-variables": {
               "OPENDAQ_GENERATE_PYTHON_BINDINGS": false,
               "OPENDAQ_GENERATE_CSHARP_BINDINGS": false
             }
           },
           {
+            "match-jobs": ["ubuntu-*-x86-*"],
+            "cache-variables": {
+              "OPENDAQ_FORCE_COMPILE_32BIT": true
+            }
+          },
+          {
             "match-jobs": ["ubuntu-20.04-x86-*"],
             "cache-variables": {
-              "OPENDAQ_FORCE_COMPILE_32BIT": true,
               "CMAKE_CXX_FLAGS": "-Wno-error=shift-count-overflow"
             }
           },
