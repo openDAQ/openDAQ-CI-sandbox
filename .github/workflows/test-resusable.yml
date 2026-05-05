@@ -101,6 +101,12 @@ jobs:
             "cache-variables": {
               "OPENDAQ_MSVC_SINGLE_PROCESS_BUILD": true
             }
+          },
+          {
+            "match-jobs": ["windows-*-ninja-clang-*"],
+            "cache-variables": {
+              "CMAKE_CXX_FLAGS": "-Wno-error=deprecated-literal-operator"
+            }
           }
         ]
 
