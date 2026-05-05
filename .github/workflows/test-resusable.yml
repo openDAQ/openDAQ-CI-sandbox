@@ -22,20 +22,24 @@ jobs:
       repo-ref: ${{ inputs.repo-ref || 'jira/TBBAS-3212-replace-ci-with-reusable' }}
       timeout: '[{"timeout-minutes": 270}]'
       upload-pattern: 'ci-opendaq-*'
+      # include-jobs: >
+      #   [
+      #     "windows-2025-x86_64-msvs-v143-debug",
+      #     "windows-2025-x86-msvs-v143-release",
+      #     "windows-2025-x86_64-ninja-clang-release",
+      #     "windows-2025-x86_64-ninja-intel-cc-release",
+      #     "ubuntu-20.04-x86-ninja-gcc-7-release",
+      #     "ubuntu-20.04-x86_64-ninja-clang-9-release",
+      #     "ubuntu-24.04-x86_64-ninja-gcc-14-debug",
+      #     "ubuntu-24.04-x86_64-ninja-gcc-14-release",
+      #     "ubuntu-24.04-x86_64-ninja-clang-18-release",
+      #     "macos-26-x86_64-ninja-appleclang-debug",
+      #     "macos-26-armv8-ninja-appleclang-release",
+      #     "macos-15-x86_64-ninja-appleclang-release"
+      #   ]
       include-jobs: >
         [
-          "windows-2025-x86_64-msvs-v143-debug",
-          "windows-2025-x86-msvs-v143-release",
-          "windows-2025-x86_64-ninja-clang-release",
-          "windows-2025-x86_64-ninja-intel-cc-release",
-          "ubuntu-20.04-x86-ninja-clang-9-release",
-          "ubuntu-20.04-x86_64-ninja-clang-9-release",
-          "ubuntu-24.04-x86_64-ninja-gcc-14-debug",
-          "ubuntu-24.04-x86_64-ninja-gcc-14-release",
-          "ubuntu-24.04-x86_64-ninja-clang-18-release",
-          "macos-26-x86_64-ninja-appleclang-debug",
-          "macos-26-armv8-ninja-appleclang-release",
-          "macos-15-x86_64-ninja-appleclang-release"
+          "ubuntu-20.04-x86-ninja-gcc-7-release"
         ]
       packages: >
         [
