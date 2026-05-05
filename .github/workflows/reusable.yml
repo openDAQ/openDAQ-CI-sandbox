@@ -666,12 +666,62 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"test-results-dir={test_results_dir}{os.sep}\n")
 
+      - name: Setup diagnostics (strace)
+        if: matrix.enable-tests && contains(matrix.name, 'x86-ninja-gcc')
+        shell: bash
+        run: |
+          apt-get install -y --no-install-recommends strace
+          mkdir -p "${{ github.workspace }}/diag"
+
       - name: Test
         id: test
         if: matrix.enable-tests
+        shell: bash
         env:
           GTEST_OUTPUT: xml:${{ steps.setup-gtest.outputs.test-results-dir }}
-        run: ${{ matrix.cmd-ctest-priv }} ctest --preset ${{ matrix.name }}
+        run: |
+          set +e
+          DIAG="${{ github.workspace }}/diag"
+
+          if [[ "${{ matrix.name }}" == *x86-ninja-gcc* ]]; then
+            # Background: dump /proc/<pid>/maps every 50ms while test_opcuatms_integration is alive
+            (
+              while true; do
+                PID=$(pidof test_opcuatms_integration 2>/dev/null | awk '{print $1}')
+                if [ -n "$PID" ]; then
+                  i=0
+                  while kill -0 "$PID" 2>/dev/null; do
+                    cp "/proc/$PID/maps" "$DIAG/maps.$(printf %05d $i).txt" 2>/dev/null || true
+                    i=$((i+1))
+                    sleep 0.05
+                  done
+                fi
+                sleep 0.1
+              done
+            ) &
+            MAPS_BG=$!
+
+            # strace -ff writes one file per process (strace.<PID>); -e trace= filters to mem/thread syscalls
+            strace -ff -e trace=mmap,munmap,mprotect,clone,clone3,brk \
+              -o "$DIAG/strace" \
+              ${{ matrix.cmd-ctest-priv }} ctest --preset ${{ matrix.name }}
+            RC=$?
+
+            kill $MAPS_BG 2>/dev/null || true
+            wait 2>/dev/null || true
+            exit $RC
+          else
+            ${{ matrix.cmd-ctest-priv }} ctest --preset ${{ matrix.name }}
+          fi
+
+      - name: Upload diagnostic artifacts
+        if: ${{ !cancelled() && matrix.enable-tests && contains(matrix.name, 'x86-ninja-gcc') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: diag-${{ matrix.name }}
+          path: ${{ github.workspace }}/diag/
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload test results
         if: ${{ !cancelled() && contains('success failure', steps.test.outcome) && matrix.gtest-artifact != '' }}
