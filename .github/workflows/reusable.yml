@@ -78,6 +78,7 @@ jobs:
           _base = {
               "runner": None,
               "image": None,
+              "container-options": "",
               "bootstrap": None,
               "package-managers": [],
               "generator": None,
@@ -91,7 +92,7 @@ jobs:
               "cmd-choco-envs": [],
               "cmd-winget-envs": [],
               "cmd-pip-envs": [],
-              "fmt-apt-install": "{sudo} {envs} apt-get install -y --no-install-recommends {pkgs}",
+              "fmt-apt-install": "{sudo} {envs} apt-get -o Acquire::Retries=5 install -y --no-install-recommends {pkgs}",
               "fmt-pip-install": "python{ver}{arch} -m pip install {pkgs}",
               "fmt-brew-install": "{envs} brew install {pkgs}",
               "fmt-choco-install": "{envs} choco install -y {pkgs}",
@@ -158,7 +159,7 @@ jobs:
 
           # --- Windows configs ---
 
-          _windows_2025_x86_64 = {
+          _windows_2022_x86_64 = {
               **_base,
               "runner": "windows-2022",
               "package-managers": ["choco", "winget", "pip"],
@@ -166,8 +167,8 @@ jobs:
               "setup-msvc-toolchain": True,
           }
 
-          _windows_2025_x86_64_msvs  = {**_windows_2025_x86_64, "generator": "Visual Studio 17 2022"}
-          _windows_2025_x86_64_ninja = {**_windows_2025_x86_64, "generator": "Ninja"}
+          _windows_2022_x86_64_msvs  = {**_windows_2022_x86_64, "generator": "Visual Studio 17 2022"}
+          _windows_2022_x86_64_ninja = {**_windows_2022_x86_64, "generator": "Ninja"}
 
           # --- Intel oneAPI configs (lookup by 'setup-intel-cc' job field) ---
 
@@ -195,13 +196,13 @@ jobs:
           # --- Jobs configs ---
 
           jobs_cfg = {
-              "windows-2025-x86_64-msvs-v143-debug":        {**_windows_2025_x86_64_msvs,   "toolset": "v143",                            "build-type": "Debug" },
-              "windows-2025-x86-msvs-v143-release":         {**_windows_2025_x86_64_msvs,   "toolset": "v143",                            "build-type": "Release",  "target-arch": "x86" },
+              "windows-2022-x86_64-msvs-v143-debug":        {**_windows_2022_x86_64_msvs,   "toolset": "v143",                            "build-type": "Debug" },
+              "windows-2022-x86-msvs-v143-release":         {**_windows_2022_x86_64_msvs,   "toolset": "v143",                            "build-type": "Release",  "target-arch": "x86" },
 
-              "windows-2025-x86_64-ninja-clang-release":    {**_windows_2025_x86_64_ninja,  "cc": "clang",      "cxx": "clang++",         "build-type": "Release" },
-              "windows-2025-x86_64-ninja-intel-cc-release": {**_windows_2025_x86_64_ninja,  "cc": "icx",        "cxx": "icx",             "build-type": "Release",  "setup-intel-cc": "windows-intel-cc" },
+              "windows-2022-x86_64-ninja-clang-release":    {**_windows_2022_x86_64_ninja,  "cc": "clang",      "cxx": "clang++",         "build-type": "Release" },
+              "windows-2022-x86_64-ninja-intel-cc-release": {**_windows_2022_x86_64_ninja,  "cc": "icx",        "cxx": "icx",             "build-type": "Release",  "setup-intel-cc": "windows-intel-cc" },
 
-              "ubuntu-20.04-x86-ninja-gcc-7-release":       {**_ubuntu_20_04_x86_64_ninja,  "cc": "gcc-7",      "cxx": "g++-7",           "build-type": "Release",  "target-arch": "x86", "bootstrap": "dpkg --add-architecture i386 && apt-get update && apt-get install -y git python3-pip curl gnupg ca-certificates", "apt-install": ["gcc-7", "g++-7", "gcc-7-multilib", "g++-7-multilib"]},
+              "ubuntu-20.04-x86-ninja-gcc-7-release":       {**_ubuntu_20_04_x86_64_ninja,  "cc": "gcc-7",      "cxx": "g++-7",           "build-type": "Release",  "target-arch": "x86", "container-options": "--ulimit nofile=65536:65536 --ulimit nproc=16384:16384", "bootstrap": "dpkg --add-architecture i386 && apt-get update && apt-get install -y git python3-pip curl gnupg ca-certificates", "apt-install": ["gcc-7", "g++-7", "gcc-7-multilib", "g++-7-multilib"]},
               "ubuntu-20.04-x86_64-ninja-clang-9-release":  {**_ubuntu_20_04_x86_64_ninja,  "cc": "clang-9",    "cxx": "clang++-9",       "build-type": "Release",  "apt-install": ["clang-9"] },
 
               "ubuntu-24.04-x86_64-ninja-gcc-14-debug":     {**_ubuntu_24_04_x86_64_ninja,  "cc": "gcc-14",     "cxx": "g++-14",          "build-type": "Debug",   "apt-install": ["gcc-14", "g++-14"] },
@@ -347,6 +348,7 @@ jobs:
                   "name": job_name,
                   "runner": runner,
                   "image": image,
+                  "container-options": cfg.get("container-options") or "",
                   "bootstrap": cfg.get("bootstrap") or "",
                   "generator": cfg["generator"],
                   "toolset": cfg.get("toolset") or "",
@@ -500,6 +502,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     container:
       image: ${{ matrix.image }}
+      options: ${{ matrix.container-options }}
     timeout-minutes: ${{ matrix.timeout-minutes }}
     strategy:
       fail-fast: false
