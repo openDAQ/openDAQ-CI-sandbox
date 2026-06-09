@@ -3,6 +3,18 @@ name: Build and Test
 on:
   workflow_call:
     inputs:
+      project-org:
+        description: "Organization (owner) of the project repository to check out. If empty, uses the caller's org."
+        type: string
+        default: ''
+      project-repo:
+        description: "Project repository name to check out. If empty, uses the caller's repo."
+        type: string
+        default: ''
+      project-ref:
+        description: "Branch, tag or commit of the project repository to check out. If empty, uses the repo's default ref."
+        type: string
+        default: ''
       opendaq-ref:
         description: "openDAQ commit, branch or tag. If empty, uses the opendaq_ref file from the repo."
         type: string
@@ -213,6 +225,7 @@ jobs:
               "ubuntu-24.04-x86_64-ninja-intel-cc-release": {**_ubuntu_24_04_x86_64_ninja,  "cc": "icx",        "cxx": "icpx",            "build-type": "Release",  "setup-intel-cc": "linux-intel-cc"},
 
               "macos-26-x86_64-ninja-appleclang-debug":     {**_macos_26_x86_64_ninja,      **_apple_clang_cc,  **_apple_clang_cxx,        "build-type": "Debug"},
+              "macos-26-x86_64-ninja-appleclang-release":   {**_macos_26_x86_64_ninja,      **_apple_clang_cc,  **_apple_clang_cxx,        "build-type": "Release"},
               "macos-26-armv8-ninja-appleclang-release":    {**_macos_26_armv8_ninja,       **_apple_clang_cc,  **_apple_clang_cxx,        "build-type": "Release"},
 
               "macos-15-x86_64-ninja-appleclang-release":   {**_macos_15_x86_64_ninja,      **_apple_clang_cc,  **_apple_clang_cxx,        "build-type": "Release"},
@@ -302,18 +315,22 @@ jobs:
 
               install_cmds["cmd-run-post-package"] = user_pkgs.get("run", "")
 
-              # find test-preset and run-tests-priv for this job
+              # find test-preset, run-tests-priv and install-prefix for this job
               test_preset = ""
               run_tests_priv = False
+              install_prefix = ""
               for entry in cmake_presets:
                   if matches_any(job_name, entry.get("match-jobs", ["*"])):
                       test_preset = entry.get("test-preset", test_preset)
                       run_tests_priv = entry.get("run-tests-priv", run_tests_priv)
-              
+                      install_prefix = entry.get("install-prefix", install_prefix)
+
               cmd_run_tests_priv = f"sudo -E " if run_tests_priv and sudo else ""
-              
+
               enable_tests = bool(test_preset)
               gtest_artifact = upload_pattern.replace("*", f"test-results-{job_name}") if enable_tests else ""
+
+              install_artifact = upload_pattern.replace("*", f"install-{job_name}") if install_prefix else ""
 
               # find timeout for this job
               timeout_minutes = cfg.get("timeout-minutes", 120)
@@ -369,6 +386,8 @@ jobs:
                   "enable-tests": enable_tests,
                   "gtest-artifact": gtest_artifact,
                   "cmd-ctest-priv": cmd_run_tests_priv,
+                  "install-prefix": install_prefix,
+                  "install-artifact": install_artifact,
                   "python-version": python_version,
                   "python-arch": python_arch,
                   **install_cmds,
@@ -521,6 +540,9 @@ jobs:
         run: git config --global --add safe.directory '*'
 
       - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.project-repo != '' && format('{0}/{1}', inputs.project-org != '' && inputs.project-org || github.repository_owner, inputs.project-repo) || github.repository }}
+          ref: ${{ inputs.project-ref }}
 
       - name: Setup CMake
         uses: jwlawson/actions-setup-cmake@v2
@@ -639,6 +661,20 @@ jobs:
       - name: Build
         id: build
         run: cmake --build --preset ${{ matrix.name }}
+
+      - name: Install
+        id: install
+        if: matrix.install-prefix != ''
+        run: cmake --install build/output --config ${{ matrix.build-type }} --prefix "${{ matrix.install-prefix }}"
+
+      - name: Upload install artifact
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.install-artifact != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.install-artifact }}
+          path: ${{ matrix.install-prefix }}
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Setup GTest
         id: setup-gtest

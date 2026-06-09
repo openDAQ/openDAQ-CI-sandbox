@@ -1,0 +1,28 @@
+name: CI openDAQ
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ci:
+    name: openDAQ-Build
+    uses: ./.github/workflows/reusable.yml
+    with:
+      project-org: openDAQ
+      project-repo: openDAQ
+      project-ref: ci/staging
+      timeout: '[{"timeout-minutes": 270}]'
+      include-jobs: >
+        [
+          "macos-26-x86_64-ninja-appleclang-release"
+        ]
+      cmake-presets: >
+        [
+          {
+            "configure-preset": "core",
+            "match-jobs": ["macos-*"],
+            "run-tests-priv": true,
+            "install-prefix": "staging",
+            "cache-variables": {"CMAKE_OSX_DEPLOYMENT_TARGET": "10.15"}
+          }
+        ]
