@@ -1,0 +1,33 @@
+diff --git a/bindings/dotnet/openDAQ.Net/openDAQ.Net/openDAQ.Net.csproj b/bindings/dotnet/openDAQ.Net/openDAQ.Net/openDAQ.Net.csproj
+index 7109047f..ddb1910d 100644
+--- a/bindings/dotnet/openDAQ.Net/openDAQ.Net/openDAQ.Net.csproj
++++ b/bindings/dotnet/openDAQ.Net/openDAQ.Net/openDAQ.Net.csproj
+@@ -49,8 +49,12 @@
+     <!-- constants -->
+     <_RootPath>..\..\..\..</_RootPath>
+     <_BuildPath>$(_RootPath)\build</_BuildPath>
++    <!-- Default path for local VS builds (without CMake) -->
+     <_SdkOutputPath>$(_BuildPath)\x64\msvc-22\full\bin</_SdkOutputPath>
+-    <_SdkOutputPath Condition="Exists('$(CMAKE_RUNTIME_OUTPUT_DIRECTORY)')">$(CMAKE_RUNTIME_OUTPUT_DIRECTORY)</_SdkOutputPath>
++    <!-- When built via CMake, it passes the correct bin path (including $<CONFIG> for multi-config generators) -->
++    <_SdkBinPath Condition="Exists('$(CMAKE_RUNTIME_OUTPUT_DIRECTORY)')">$(CMAKE_RUNTIME_OUTPUT_DIRECTORY)</_SdkBinPath>
++    <!-- Fallback for local VS builds without CMake -->
++    <_SdkBinPath Condition="'$(_SdkBinPath)' == ''">$(_SdkOutputPath)\$(Configuration)</_SdkBinPath>
+     <_SdkOutputPathWindows64 Condition="Exists('$(SDK_WIN64_PATH)')">$(SDK_WIN64_PATH)</_SdkOutputPathWindows64>
+     <_SdkOutputPathLinux64 Condition="Exists('$(SDK_LINUX64_PATH)')">$(SDK_LINUX64_PATH)</_SdkOutputPathLinux64>
+     <_IsCiPackBuild Condition="'$(_SdkOutputPathWindows64)' != ''">True</_IsCiPackBuild>
+@@ -122,12 +126,12 @@
+     <!-- https://learn.microsoft.com/en-us/visualstudio/msbuild/common-msbuild-project-items?view=vs-2022#none -->
+     <!-- VS: have the bin output in layout '*.dll' and 'modules\*.dll' -->
+     <!-- NuGet: pack all runtime DLLs into this layout 'runtimes\<architecture>\native\**' -->
+-    <OpenDaqLibs Include="$(_SdkOutputPath)\$(Configuration)\*.dll" Exclude="$(_SdkOutputPath)\$(Configuration)\*.module.dll" />
++    <OpenDaqLibs Include="$(_SdkBinPath)\*.dll" Exclude="$(_SdkBinPath)\*.module.dll" />
+     <None Include="@(OpenDaqLibs)" PackagePath="$(_PackageRuntimesPath)\" Pack="true" Visible="false">
+       <Link>%(FileName)%(Extension)</Link>
+       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+     </None>
+-    <OpenDaqModuleLibs Include="$(_SdkOutputPath)\$(Configuration)\*.module.dll" />
++    <OpenDaqModuleLibs Include="$(_SdkBinPath)\*.module.dll" />
+     <None Include="@(OpenDaqModuleLibs)" PackagePath="$(_PackageRuntimesPath)\modules\" Pack="true" Visible="false">
+       <Link>modules\%(FileName)%(Extension)</Link>
+       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
