@@ -3,6 +3,10 @@ name: Deploy staging to ghcr.io
 on:
   workflow_call:
     inputs:
+      run-id:
+        description: 'Run ID to download artifacts from (default: current run)'
+        required: false
+        type: string
       images:
         description: >
           JSON array: [{"artifact": "pattern-*", "path": "ghcr.io/opendaq/sandbox", "tag": "abc123"}]
@@ -20,16 +24,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: _artifacts
+          run-id: ${{ inputs.run-id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install crane
-        uses: imjasonh/setup-crane@v0.4
+      - name: Install oras
+        uses: oras-project/setup-oras@v1
 
       - name: Login to ghcr.io
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: echo "$GH_TOKEN" | crane auth login ghcr.io -u "${{ github.actor }}" --password-stdin
+        run: oras login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Push images
+      - name: Push artifacts
         shell: python3 {0}
         env:
           IMAGES: ${{ inputs.images }}
@@ -39,9 +43,9 @@ jobs:
 
           images = json.loads(os.environ["IMAGES"])
 
-          def crane(*args):
-              print("+ crane", *args)
-              subprocess.run(["crane", *args], check=True)
+          def run(*args):
+              print("+", *args)
+              return subprocess.run(args, check=True, capture_output=True, text=True)
 
           rows = []
           for img in images:
@@ -67,13 +71,13 @@ jobs:
                       continue
                   tarball = tarballs[0]
 
-                  print(f"::group::{name} -> {path}/{name}:{tag}")
+                  print(f"::group::{name} -> {image}")
                   print(f"Tarball: {tarball} ({os.path.getsize(tarball)} bytes)")
 
-                  crane("push", tarball, image)
+                  run("oras", "push", image, tarball)
 
-                  digest = subprocess.run(["crane", "digest", image],
-                                          capture_output=True, text=True).stdout.strip()
+                  result = run("oras", "resolve", image)
+                  digest = result.stdout.strip()
 
                   rows.append((name, repo, tag, digest))
                   print("::endgroup::")

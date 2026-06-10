@@ -2,6 +2,11 @@ name: Build openDAQ
 
 on:
   workflow_dispatch:
+    inputs:
+      run-id:
+        description: 'Run ID with existing artifacts (skip build, deploy only)'
+        required: false
+        type: string
 
 env:
   project_org: openDAQ
@@ -28,6 +33,7 @@ jobs:
           echo "Resolved ${{ env.project_org }}/${{ env.project_repo }}@${{ env.project_ref }} -> $SHA"
 
   ci:
+    if: ${{ inputs.run-id == '' }}
     needs: resolve
     name: openDAQ-Build
     uses: ./.github/workflows/reusable.yml
@@ -51,6 +57,7 @@ jobs:
         ]
 
   deploy:
+    if: ${{ !cancelled() && (inputs.run-id != '' || needs.ci.result == 'success') }}
     needs: [ci, resolve]
     permissions:
       packages: write
@@ -58,6 +65,7 @@ jobs:
       actions: read
     uses: ./.github/workflows/deploy-staging.yml
     with:
+      run-id: ${{ inputs.run-id }}
       images: >
         [
           {
