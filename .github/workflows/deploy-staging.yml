@@ -18,10 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
+      actions: read
 
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: _artifacts
           run-id: ${{ inputs.run-id || github.run_id }}
@@ -63,15 +64,16 @@ jobs:
                   continue
 
               for d in matched:
-                  name = os.path.basename(d)
-                  repo  = f"{path}/{name}"
-                  image = f"{repo}:{tag}"
-
                   tarballs = glob.glob(os.path.join(d, "*.tar.gz"))
                   if not tarballs:
-                      print(f"::warning::No .tar.gz in '{name}', skipping")
+                      print(f"::warning::No .tar.gz in '{os.path.basename(d)}', skipping")
                       continue
                   tarball = tarballs[0]
+
+                  # image name = CPACK package name (the tarball's own name), e.g. opendaq-<version>-...
+                  name = os.path.basename(tarball).removesuffix(".tar.gz")
+                  repo  = f"{path}/{name}"
+                  image = f"{repo}:{tag}"
 
                   print(f"::group::{name} -> {image}")
                   print(f"Tarball: {tarball} ({os.path.getsize(tarball)} bytes)")

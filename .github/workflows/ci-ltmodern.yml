@@ -2,6 +2,11 @@ name: Stage LTStreamingModulesModern
 
 on:
   workflow_dispatch:
+    inputs:
+      run-id:
+        description: 'Run ID with existing artifacts (skip build, deploy only)'
+        required: false
+        type: string
 
 env:
   project_org: openDAQ
@@ -28,6 +33,7 @@ jobs:
           echo "Resolved ${{ env.project_org }}/${{ env.project_repo }}@${{ env.project_ref }} -> $SHA"
 
   ci:
+    if: ${{ inputs.run-id == '' }}
     needs: resolve
     name: LTModern-Build
     permissions:
@@ -74,7 +80,7 @@ jobs:
             "staging": [
               {
                 "dir": "staging-deps",
-                "images": ["ghcr.io/opendaq/sandbox/staging-macos-26-x86_64-ninja-appleclang-release:fece4a92d1261da510202387573c6cb0483e745d"]
+                "images": ["ghcr.io/opendaq/sandbox/opendaq-3.40.0-x86_64-macos-apple-clang-21-release:fece4a92d1261da510202387573c6cb0483e745d"]
               }
             ]
           },
@@ -83,8 +89,27 @@ jobs:
             "staging": [
               {
                 "dir": "staging-deps",
-                "images": ["ghcr.io/opendaq/sandbox/staging-windows-2022-x86_64-msvs-v143-release:fece4a92d1261da510202387573c6cb0483e745d"]
+                "images": ["ghcr.io/opendaq/sandbox/opendaq-3.40.0-x86_64-windows-msvc-143-release:fece4a92d1261da510202387573c6cb0483e745d"]
               }
             ]
+          }
+        ]
+
+  deploy:
+    if: ${{ !cancelled() && (inputs.run-id != '' || needs.ci.result == 'success') }}
+    needs: [ci, resolve]
+    permissions:
+      packages: write
+      contents: read
+      actions: read
+    uses: ./.github/workflows/deploy-staging.yml
+    with:
+      run-id: ${{ inputs.run-id }}
+      images: >
+        [
+          {
+            "artifact": "staging-*",
+            "path": "ghcr.io/opendaq/sandbox",
+            "tag": "${{ needs.resolve.outputs.sha }}"
           }
         ]
