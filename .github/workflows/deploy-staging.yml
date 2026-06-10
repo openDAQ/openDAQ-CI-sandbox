@@ -31,7 +31,9 @@ jobs:
         uses: oras-project/setup-oras@v1
 
       - name: Login to ghcr.io
-        run: oras login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Push artifacts
         shell: python3 {0}

@@ -277,6 +277,11 @@ jobs:
                           print(f"::warning::Matrix job '{job_name}': '{pm}' is not supported by this runner, skipping installation of {v}")
                           continue
                       user_pkgs.setdefault(k, []).extend(v)
+                  for stg in req.get("staging", []):
+                      user_pkgs.setdefault("staging", []).append({
+                          "images": stg["images"],
+                          "dir": stg.get("dir", "staging-deps"),
+                      })
                   user_pkgs["run"] = req.get("run", user_pkgs.get("run", ""))
                   python_version = req.get("use-python-version", python_version)
 
@@ -387,6 +392,7 @@ jobs:
                   "cmd-ctest-priv": cmd_run_tests_priv,
                   "staging": staging,
                   "staging-artifact": staging_artifact,
+                  "staging-dep-images": json.dumps(user_pkgs.get("staging") or []),
                   "python-version": python_version,
                   "python-arch": python_arch,
                   **install_cmds,
@@ -652,6 +658,38 @@ jobs:
                       continue
                   if os.environ.get(k) != v:
                       f.write(f"{k}={v}\n")
+
+      - name: Install oras
+        if: matrix.staging-dep-images != '[]'
+        uses: oras-project/setup-oras@v1
+
+      - name: Login to ghcr.io
+        if: matrix.staging-dep-images != '[]'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Pull staging dependencies
+        if: matrix.staging-dep-images != '[]'
+        shell: python3 {0}
+        env:
+          STAGING_DEPS: ${{ matrix.staging-dep-images }}
+        run: |
+          import os, json, subprocess, glob
+
+          deps = json.loads(os.environ["STAGING_DEPS"])
+
+          for entry in deps:
+              deps_dir = os.path.join(os.getcwd(), entry["dir"])
+              os.makedirs(deps_dir, exist_ok=True)
+
+              for image in entry["images"]:
+                  print(f"Pulling {image} -> {deps_dir}")
+                  subprocess.run(["oras", "pull", "-o", deps_dir, image], check=True)
+
+              for f in glob.glob(os.path.join(deps_dir, "*.tar.gz")):
+                  print(f"Extracting {f}")
+                  subprocess.run(["tar", "xzf", f, "-C", deps_dir], check=True)
 
       - name: Configure
         id: configure

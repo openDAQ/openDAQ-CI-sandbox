@@ -1,16 +1,11 @@
-name: Stage openDAQ
+name: Stage LTStreamingModulesModern
 
 on:
   workflow_dispatch:
-    inputs:
-      run-id:
-        description: 'Run ID with existing artifacts (skip build, deploy only)'
-        required: false
-        type: string
 
 env:
   project_org: openDAQ
-  project_repo: openDAQ
+  project_repo: LTStreamingModulesModern
   project_ref: ci/staging
 
 jobs:
@@ -33,9 +28,11 @@ jobs:
           echo "Resolved ${{ env.project_org }}/${{ env.project_repo }}@${{ env.project_ref }} -> $SHA"
 
   ci:
-    if: ${{ inputs.run-id == '' }}
     needs: resolve
-    name: openDAQ-Build
+    name: LTModern-Build
+    permissions:
+      contents: read
+      packages: read
     uses: ./.github/workflows/reusable.yml
     with:
       project-org: ${{ needs.resolve.outputs.org }}
@@ -50,27 +47,24 @@ jobs:
         [
           {
             "match-jobs": ["macos-*"],
-            "configure-preset": "core",
-            "cache-variables": {"CMAKE_OSX_DEPLOYMENT_TARGET": "10.15"},
+            "configure-preset": "module",
+            "cache-variables": {
+              "DAQMODULES_LT_STREAMING_ENABLE_TESTS": "OFF",
+              "CMAKE_OSX_DEPLOYMENT_TARGET": "10.15",
+              "CMAKE_PREFIX_PATH": "${sourceDir}/staging-deps/opt/opendaq"
+            },
             "staging": true
           }
         ]
-
-  deploy:
-    if: ${{ !cancelled() && (inputs.run-id != '' || needs.ci.result == 'success') }}
-    needs: [ci, resolve]
-    permissions:
-      packages: write
-      contents: read
-      actions: read
-    uses: ./.github/workflows/deploy-staging.yml
-    with:
-      run-id: ${{ inputs.run-id }}
-      images: >
+      packages: >
         [
           {
-            "artifact": "staging-*",
-            "path": "ghcr.io/opendaq/sandbox",
-            "tag": "${{ needs.resolve.outputs.sha }}"
+            "match-jobs": ["macos-*"],
+            "staging": [
+              {
+                "dir": "staging-deps",
+                "images": ["ghcr.io/opendaq/sandbox/staging-macos-26-x86_64-ninja-appleclang-release:fece4a92d1261da510202387573c6cb0483e745d"]
+              }
+            ]
           }
         ]
