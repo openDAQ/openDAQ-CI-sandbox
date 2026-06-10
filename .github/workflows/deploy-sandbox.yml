@@ -1,121 +1,344 @@
-name: Deploy openDAQ packages (sandbox)
+name: Deploy openDAQ SDK packages on AWS
 
 on:
   workflow_run:
     workflows: ["Build openDAQ packages"]
     types: [completed]
+    # branches: [main]
 
   workflow_dispatch:
     inputs:
       run-id:
-        description: 'Package workflow run ID to deploy from (leave empty to use latest successful)'
-        required: false
+        description: 'Package workflow run ID to deploy from'
+        required: true
         type: string
+      # TODO: Remove `s3-path` inputs before merge  
+      s3-path:
+        description: 'S3 path to dump (default: releases/main)'
+        required: false
+        default: ''
+        type: string
+      # TODO: Remove `recursive` inputs before merge  
+      recursive:
+        description: 'List contents recursively'
+        required: false
+        default: false
+        type: boolean
 
 env:
+  s3bucket: bb-blueberry-sdk-releases
+  build_path: ${{ github.workspace }}/build
   project_ref: "905beb26396f474ce6ebb90d0148244f33d0370e"
-  sandbox_dir: _ci-sandbox
 
 jobs:
-  deploy_packages:
+  resolve:
     runs-on: ubuntu-latest
-    name: Deploy packages to S3
+    name: Resolve build context
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
 
-    env:
-      RUN_ID: ${{ github.event.workflow_run.id || inputs.run-id }}
+    outputs:
+      branch: ${{ steps.resolve.outputs.branch }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      run-id: ${{ steps.resolve.outputs.run-id }}
 
     steps:
-      - name: Get source run info
-        id: source-run
+      - name: Resolve source context
+        id: resolve
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          RUN_INFO=$(gh api repos/${{ github.repository }}/actions/runs/${{ env.RUN_ID }})
-          BRANCH=$(echo "$RUN_INFO" | jq -r '.head_branch')
-          SHA=$(echo "$RUN_INFO" | jq -r '.head_sha')
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            REF="${{ github.event.workflow_run.head_sha }}"
+            BRANCH="${{ github.event.workflow_run.head_branch }}"
+            RUN_ID="${{ github.event.workflow_run.id }}"
+          else
+            RUN_ID="${{ inputs.run-id }}"
+            RUN_INFO=$(gh api repos/${{ github.repository }}/actions/runs/${RUN_ID})
+            REF=$(echo "$RUN_INFO" | jq -r '.head_sha')
+            BRANCH=$(echo "$RUN_INFO" | jq -r '.head_branch')
+          fi
+          echo "ref=${{ env.project_ref }}" >> $GITHUB_OUTPUT
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
-          echo "sha=$SHA" >> $GITHUB_OUTPUT
-          echo "Deploy workflow branch: ${{ github.ref_name }}"
-          echo "Source run: #${{ env.RUN_ID }}, branch=$BRANCH, sha=$SHA"
+          echo "run-id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "Source context: ref=$REF, branch=$BRANCH, run-id=$RUN_ID"
 
+  prepare_doc:
+    runs-on: ubuntu-latest
+    name: Build User Guide
+    needs: [resolve]
+    timeout-minutes: 10
+
+    outputs:
+      examples-artifact-name: ${{ steps.examples.outputs.artifact-name }}
+
+    steps:
       - name: Checkout
-        uses: openDAQ/openDAQ-CI-sandbox/.github/actions/checkout-sandbox@actions/checkout-sandbox
+        uses: actions/checkout@v4
         with:
-          project-repo: openDAQ/openDAQ
-          project-ref: ${{ env.project_ref }}
-          sandbox-dir: ${{ env.sandbox_dir }}
+          ref: ${{ needs.resolve.outputs.ref }}
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '16'
+
+      - name: Install Antora
+        run: npm i antora
+
+      - name: Install Antora extensions
+        run: |
+          npm i @asciidoctor/tabs
+          npm i @springio/antora-extensions
+          npm i @antora/lunr-extension
+
+      - name: Run Antora to build user guide
+        run: |
+          case "${{ needs.resolve.outputs.branch }}" in
+            main)
+              export DAQ_DEV_WEBSITE=docs-dev
+              npx antora antora-playbook-dev.yml
+              ;;
+            *)
+              npx antora antora-playbook.yml
+              ;;
+          esac
+
+      - name: Compress user guide
+        working-directory: ${{ env.build_path }}/site/
+        run: zip -r ${{ env.build_path }}/user_guide.zip .
+
+      - name: Upload user guide
+        uses: actions/upload-artifact@v4
+        with:
+          name: user_guide
+          path: ${{ env.build_path }}/user_guide.zip
+          retention-days: 7
+
+      - name: Call the API to deploy the documentation
+        # TODO: Enable step before merge
+        if: false
+        run: |
+          BRANCH="${{ needs.resolve.outputs.branch }}"
+          case "$BRANCH" in
+            main)
+              wget ${{ secrets.DEPLOY_DEV_DOCUMENTATION_URL_AND_TOKEN }}
+              ;;
+            release/*)
+              wget ${{ secrets.DEPLOY_DOCUMENTATION_URL_AND_TOKEN }}
+              ;;
+            *)
+              echo "::warning::Branch '$BRANCH' is not a release or dev branch, skipping documentation deploy"
+              ;;
+          esac
 
       - name: Detect version
         id: detect
         uses: ./.github/actions/package-version-detect
 
-      - name: Print deploy info
+      - name: Build examples archive
+        id: examples
         run: |
-          echo "Event: ${{ github.event_name }}"
-          echo "Source run ID: ${{ env.RUN_ID }}"
-          echo "Branch: ${{ steps.source-run.outputs.branch }}"
-          echo "SHA: ${{ steps.source-run.outputs.sha }}"
-          echo "Version: ${{ steps.detect.outputs.version-full }}"
+          EXAMPLES_NAME="opendaq-${{ steps.detect.outputs.version-full }}-examples"
+          zip -r "${EXAMPLES_NAME}.zip" examples/applications -x examples/applications/CMakeLists.txt
+          echo "artifact-name=$EXAMPLES_NAME" >> $GITHUB_OUTPUT
+          echo "artifact-path=${EXAMPLES_NAME}.zip" >> $GITHUB_OUTPUT
 
-      - name: Download all artifacts
+      - name: Upload examples
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.examples.outputs.artifact-name }}
+          path: ${{ steps.examples.outputs.artifact-path }}
+          retention-days: 7
+
+  deploy_packages:
+    runs-on: ubuntu-latest
+    name: Deploy packages to S3
+    needs: [resolve, prepare_doc]
+
+    env:
+      RUN_ID: ${{ needs.resolve.outputs.run-id }}
+      BRANCH: ${{ needs.resolve.outputs.branch }}
+      DOWNLOAD_PATH: ${{ github.workspace }}/_artifacts/download
+      # TODO: Remove UPLOAD_PATH before merge
+      UPLOAD_PATH: ${{ github.workspace }}/_artifacts/upload
+      DST_ROOT_DIR: releases
+      SDK_DIR: SDK
+      WHEELS_LINUX_X64_DIR: Python Wheels (Linux x86_64)
+      WHEELS_WINDOWS_X64_DIR: Python Wheels (Windows amd64)
+      WHEELS_MACOS_X64_DIR: Python Wheels (MacOS x86_64)
+      WHEELS_MACOS_ARM_DIR: Python Wheels (MacOS ARM)
+      DOTNET_DIR: dotNET Bindings
+      SIMULATOR_DIR: Simulator
+      DOC_DIR: Specifications and documentation
+
+    steps:
+      - name: Download package artifacts
         uses: actions/download-artifact@v4
         with:
-          path: _artifacts/download
-          run-id: ${{ env.RUN_ID }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.RUN_ID }}
+          path: ${{ env.DOWNLOAD_PATH }}
 
-      - name: Organize artifacts for S3
-        env:
-          BRANCH: ${{ steps.source-run.outputs.branch }}
+      - name: Download user guide
+        uses: actions/download-artifact@v4
+        with:
+          name: user_guide
+          path: ${{ env.DOWNLOAD_PATH }}
+
+      - name: Download examples
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.prepare_doc.outputs.examples-artifact-name }}
+          path: ${{ env.DOWNLOAD_PATH }}
+
+      - name: Configure AWS credentials
+        # TODO: Enable step before merge
+        if: false
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload to S3
+        # TODO: Enable step before merge
+        if: false
         run: |
-          SRC="_artifacts/download"
-          DST="_artifacts/output/releases/${BRANCH}"
+          SRC="${DOWNLOAD_PATH}"
+          S3_PATH="${DST_ROOT_DIR}/${BRANCH}"
+          DST_URI="s3://${{ env.s3bucket }}/${S3_PATH}"
 
-          mkdir -p "${DST}/SDK"
-          mkdir -p "${DST}/Python Wheels (Linux x86_64)"
-          mkdir -p "${DST}/Python Wheels (Windows amd64)"
-          mkdir -p "${DST}/Python Wheels (MacOS)"
-          mkdir -p "${DST}/dotNET Bindings"
-          mkdir -p "${DST}/Simulator"
-          mkdir -p "${DST}/Specifications and documentation"
+          echo 'Downloaded artifacts'
+          tree -F ${SRC}
 
-          # SDK packages (Windows + Linux, all architectures)
-          find "${SRC}"/opendaq-*_win_* "${SRC}"/opendaq-*_linux_* -type f \
-            ! -name '*.ova' 2>/dev/null | while read f; do cp "$f" "${DST}/SDK/"; done
+          # SDK packages
+          aws s3 rm "${DST_URI}/${SDK_DIR}/" --recursive --exclude '*' \
+            --include 'opendaq-*_win_*.exe' \
+            --include 'opendaq-*_win_*.zip' \
+            --include 'opendaq-*_linux_*.deb' \
+            --include 'opendaq-*_linux_*.zip' \
+            --include 'opendaq-*-examples.zip'
+          for f in "${SRC}"/opendaq-*_win_*/*.exe \
+                   "${SRC}"/opendaq-*_linux_*/*.deb \
+                   "${SRC}"/opendaq-*-examples*.zip; do
+            aws s3 cp "$f" "${DST_URI}/${SDK_DIR}/"
+          done
 
           # Python Wheels
-          cp "${SRC}"/opendaq-*-python-wheels-linux/*.whl   "${DST}/Python Wheels (Linux x86_64)/"
-          cp "${SRC}"/opendaq-*-python-wheels-windows/*.whl "${DST}/Python Wheels (Windows amd64)/"
-          cp "${SRC}"/opendaq-*-python-wheels-macos/*.whl   "${DST}/Python Wheels (MacOS)/"
+          for whl_dir_src whl_dir_dst in \
+            "opendaq-*-python-wheels-linux"   "${WHEELS_LINUX_X64_DIR}" \
+            "opendaq-*-python-wheels-windows" "${WHEELS_WINDOWS_X64_DIR}" \
+            "opendaq-*-python-wheels-macos-x86_64" "${WHEELS_MACOS_X64_DIR}" \
+            "opendaq-*-python-wheels-macos-arm64"  "${WHEELS_MACOS_ARM_DIR}"; do
+            aws s3 rm "${DST_URI}/${whl_dir_dst}/" --recursive --exclude '*' --include '*.whl'
+            aws s3 cp "${SRC}"/${whl_dir_src}/ "${DST_URI}/${whl_dir_dst}/" --recursive --exclude '*' --include '*.whl'
+          done
 
           # NuGet
-          cp "${SRC}"/opendaq.net-*/*.nupkg "${DST}/dotNET Bindings/"
+          aws s3 rm "${DST_URI}/${DOTNET_DIR}/" --recursive --exclude '*' --include '*.nupkg'
+          aws s3 cp "${SRC}"/opendaq.net-*/ "${DST_URI}/${DOTNET_DIR}/" --recursive --exclude '*' --include '*.nupkg'
+
+          # Simulator
+          aws s3 rm "${DST_URI}/${SIMULATOR_DIR}/" --recursive --exclude '*' --include '*.ova'
+          aws s3 cp "${SRC}"/opendaq-*_device_simulator*/ "${DST_URI}/${SIMULATOR_DIR}/" --recursive --exclude '*' --include '*.ova'
+
+          # Documentation
+          aws s3 rm "${DST_URI}/${DOC_DIR}/" --recursive --exclude '*' --include 'cpp_api_reference.zip' --include 'user_guide.zip'
+          aws s3 cp "${SRC}/API Reference/opendaq_cpp_api_reference.zip" "${DST_URI}/${DOC_DIR}/cpp_api_reference.zip"
+          aws s3 cp "${SRC}/user_guide.zip" "${DST_URI}/${DOC_DIR}/"
+
+          echo "## S3 Artifacts tree: ${S3_PATH:-/}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          aws s3 ls "${DST_URI}" --recursive \
+            | awk '{$1=$2=$3=""; sub(/^ +/, ""); print}' \
+            | sed "s|^${S3_PATH:+${S3_PATH}/}||" \
+            > /tmp/s3tree.txt
+          tree --fromfile /tmp/s3tree.txt --noreport -F | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      # TODO: Remove step before merge
+      - name: Organize artifacts for S3
+        run: |
+          SRC="${DOWNLOAD_PATH}"
+          DST="${UPLOAD_PATH}/${DST_ROOT_DIR}/${BRANCH}"
+
+          echo 'Downloaded artifacts'
+          tree -F ${SRC}
+
+          mkdir -p "${DST}/${SDK_DIR}"
+          mkdir -p "${DST}/${WHEELS_LINUX_X64_DIR}"
+          mkdir -p "${DST}/${WHEELS_WINDOWS_X64_DIR}"
+          mkdir -p "${DST}/${WHEELS_MACOS_X64_DIR}"
+          mkdir -p "${DST}/${WHEELS_MACOS_ARM_DIR}"
+          mkdir -p "${DST}/${DOTNET_DIR}"
+          mkdir -p "${DST}/${SIMULATOR_DIR}"
+          mkdir -p "${DST}/${DOC_DIR}"
+
+          # SDK packages
+          cp "${SRC}"/opendaq-*_win_*/*.exe   "${DST}/${SDK_DIR}/"
+          cp "${SRC}"/opendaq-*_linux_*/*.deb "${DST}/${SDK_DIR}/"
+
+          # Examples
+          cp "${SRC}"/opendaq-*-examples.zip "${DST}/${SDK_DIR}/"
+
+          # Python Wheels
+          cp "${SRC}"/opendaq-*-python-wheels-linux/*.whl   "${DST}/${WHEELS_LINUX_X64_DIR}/"
+          cp "${SRC}"/opendaq-*-python-wheels-windows/*.whl "${DST}/${WHEELS_WINDOWS_X64_DIR}/"
+          cp "${SRC}"/opendaq-*-python-wheels-macos-x86_64/*.whl "${DST}/${WHEELS_MACOS_X64_DIR}/"
+          cp "${SRC}"/opendaq-*-python-wheels-macos-arm64/*.whl  "${DST}/${WHEELS_MACOS_ARM_DIR}/"
+
+          # NuGet
+          cp "${SRC}"/opendaq.net-*/*.nupkg "${DST}/${DOTNET_DIR}/"
 
           # Simulator OVA
-          cp "${SRC}"/opendaq-*_device_simulator*/*.ova "${DST}/Simulator/"
+          cp "${SRC}"/opendaq-*_device_simulator*/*.ova "${DST}/${SIMULATOR_DIR}/"
 
-          # API Reference (rename to match existing S3 convention)
-          cp "${SRC}/API Reference"/*.zip "${DST}/Specifications and documentation/cpp_api_reference.zip"
+          # Documentation
+          cp "${SRC}/API Reference"/*.zip "${DST}/${DOC_DIR}/cpp_api_reference.zip"
+          cp "${SRC}"/user_guide.zip "${DST}/${DOC_DIR}/"
 
-      - name: List organized artifacts
+          echo '### Artifacts ready for S3 upload' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tree -F ${UPLOAD_PATH} | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # TODO: Remove dump_s3_structure job before merge
+  dump_s3_structure:
+    runs-on: ubuntu-latest
+    name: Dump S3 structure
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Dump S3 path
         run: |
-          echo '## Artifacts ready for S3 upload' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          tree -hF _artifacts/output >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-      # --- S3 Upload (uncomment when AWS credentials are configured) ---
-
-      # - name: Configure AWS credentials
-      #   uses: aws-actions/configure-aws-credentials@v4
-      #   with:
-      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      #     aws-region: ${{ secrets.AWS_REGION }}
-
-      # - name: Upload to S3
-      #   run: |
-      #     aws s3 sync _artifacts/output/ "s3://${S3BUCKET}/" --size-only
+          S3_PATH="${{ inputs.s3-path }}"
+          S3_PATH="${S3_PATH#/}"
+          S3_PATH="${S3_PATH%/}"
+          if [ -n "$S3_PATH" ]; then
+            S3_URL="s3://${{ env.s3bucket }}/${S3_PATH}/"
+          else
+            S3_URL="s3://${{ env.s3bucket }}/"
+          fi
+          if [ "${{ inputs.recursive }}" = "true" ]; then
+            echo "## S3 tree: ${S3_PATH:-/}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            aws s3 ls "${S3_URL}" --recursive \
+              | awk '{$1=$2=$3=""; sub(/^ +/, ""); print}' \
+              | sed "s|^${S3_PATH:+${S3_PATH}/}||" \
+              > /tmp/s3tree.txt
+            tree --fromfile /tmp/s3tree.txt --noreport -F | tee -a $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## S3 listing: ${S3_PATH:-/}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            aws s3 ls "${S3_URL}" | tee -a $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
