@@ -43,9 +43,9 @@ jobs:
 
           images = json.loads(os.environ["IMAGES"])
 
-          def run(*args):
+          def run(*args, cwd=None):
               print("+", *args)
-              return subprocess.run(args, check=True, capture_output=True, text=True)
+              return subprocess.run(args, check=True, capture_output=True, text=True, cwd=cwd)
 
           rows = []
           for img in images:
@@ -74,7 +74,7 @@ jobs:
                   print(f"::group::{name} -> {image}")
                   print(f"Tarball: {tarball} ({os.path.getsize(tarball)} bytes)")
 
-                  run("oras", "push", image, tarball)
+                  run("oras", "push", image, os.path.basename(tarball), cwd=d)
 
                   result = run("oras", "resolve", image)
                   digest = result.stdout.strip()
