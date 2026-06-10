@@ -315,22 +315,21 @@ jobs:
 
               install_cmds["cmd-run-post-package"] = user_pkgs.get("run", "")
 
-              # find test-preset, run-tests-priv and install-prefix for this job
+              # find test-preset, run-tests-priv and staging for this job
               test_preset = ""
               run_tests_priv = False
-              install_prefix = ""
+              staging = False
               for entry in cmake_presets:
                   if matches_any(job_name, entry.get("match-jobs", ["*"])):
                       test_preset = entry.get("test-preset", test_preset)
                       run_tests_priv = entry.get("run-tests-priv", run_tests_priv)
-                      install_prefix = entry.get("install-prefix", install_prefix)
+                      staging = entry.get("staging", staging)
 
               cmd_run_tests_priv = f"sudo -E " if run_tests_priv and sudo else ""
 
               enable_tests = bool(test_preset)
               gtest_artifact = upload_pattern.replace("*", f"test-results-{job_name}") if enable_tests else ""
-
-              install_artifact = upload_pattern.replace("*", f"install-{job_name}") if install_prefix else ""
+              staging_artifact = upload_pattern.replace("*", f"staging-{job_name}") if staging else ""
 
               # find timeout for this job
               timeout_minutes = cfg.get("timeout-minutes", 120)
@@ -386,8 +385,8 @@ jobs:
                   "enable-tests": enable_tests,
                   "gtest-artifact": gtest_artifact,
                   "cmd-ctest-priv": cmd_run_tests_priv,
-                  "install-prefix": install_prefix,
-                  "install-artifact": install_artifact,
+                  "staging": staging,
+                  "staging-artifact": staging_artifact,
                   "python-version": python_version,
                   "python-arch": python_arch,
                   **install_cmds,
@@ -662,17 +661,22 @@ jobs:
         id: build
         run: cmake --build --preset ${{ matrix.name }}
 
-      - name: Install
-        id: install
-        if: matrix.install-prefix != ''
-        run: cmake --install build/output --config ${{ matrix.build-type }} --prefix "${{ matrix.install-prefix }}"
+      - name: Staging
+        id: staging
+        if: matrix.staging
+        shell: bash
+        run: |
+          cd build/output
+          cpack -G TGZ
+          PACKAGE_NAME=$(grep 'CPACK_PACKAGE_FILE_NAME' CPackConfig.cmake | cut -d'"' -f2)
+          echo "package-name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Upload install artifact
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.install-artifact != '' }}
+      - name: Upload staging artifact
+        if: ${{ !cancelled() && steps.staging.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.install-artifact }}
-          path: ${{ matrix.install-prefix }}
+          name: ${{ matrix.staging-artifact }}
+          path: build/_packages/${{ steps.staging.outputs.package-name }}.tar.gz
           if-no-files-found: error
           retention-days: 7
 

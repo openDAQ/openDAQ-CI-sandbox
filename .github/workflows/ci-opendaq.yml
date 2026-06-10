@@ -3,14 +3,38 @@ name: Build openDAQ
 on:
   workflow_dispatch:
 
+env:
+  project_org: openDAQ
+  project_repo: openDAQ
+  project_ref: ci/staging
+
 jobs:
+  resolve:
+    name: Resolve source SHA
+    runs-on: ubuntu-latest
+    outputs:
+      org: ${{ env.project_org }}
+      repo: ${{ env.project_repo }}
+      ref: ${{ env.project_ref }}
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - name: Resolve source SHA
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA=$(gh api "repos/${{ env.project_org }}/${{ env.project_repo }}/commits/${{ env.project_ref }}" --jq '.sha')
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Resolved ${{ env.project_org }}/${{ env.project_repo }}@${{ env.project_ref }} -> $SHA"
+
   ci:
+    needs: resolve
     name: openDAQ-Build
     uses: ./.github/workflows/reusable.yml
     with:
-      project-org: openDAQ
-      project-repo: openDAQ
-      project-ref: ci/staging
+      project-org: ${{ needs.resolve.outputs.org }}
+      project-repo: ${{ needs.resolve.outputs.repo }}
+      project-ref: ${{ needs.resolve.outputs.ref }}
       timeout: '[{"timeout-minutes": 270}]'
       include-jobs: >
         [
@@ -19,10 +43,26 @@ jobs:
       cmake-presets: >
         [
           {
-            "configure-preset": "core",
             "match-jobs": ["macos-*"],
-            "run-tests-priv": true,
-            "install-prefix": "staging",
-            "cache-variables": {"CMAKE_OSX_DEPLOYMENT_TARGET": "10.15"}
+            "configure-preset": "core",
+            "cache-variables": {"CMAKE_OSX_DEPLOYMENT_TARGET": "10.15"},
+            "staging": true
+          }
+        ]
+
+  deploy:
+    needs: [ci, resolve]
+    permissions:
+      packages: write
+      contents: read
+      actions: read
+    uses: ./.github/workflows/deploy-staging.yml
+    with:
+      images: >
+        [
+          {
+            "artifact": "staging-*",
+            "path": "ghcr.io/opendaq/sandbox",
+            "tag": "${{ needs.resolve.outputs.sha }}"
           }
         ]

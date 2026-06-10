@@ -1,0 +1,85 @@
+name: Deploy staging to ghcr.io
+
+on:
+  workflow_call:
+    inputs:
+      images:
+        description: >
+          JSON array: [{"artifact": "pattern-*", "path": "ghcr.io/opendaq/sandbox", "tag": "abc123"}]
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: _artifacts
+
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.4
+
+      - name: Login to ghcr.io
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GH_TOKEN" | crane auth login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push images
+        shell: python3 {0}
+        env:
+          IMAGES: ${{ inputs.images }}
+        run: |
+          import os, glob, json, subprocess
+          from fnmatch import fnmatch
+
+          images = json.loads(os.environ["IMAGES"])
+
+          def crane(*args):
+              print("+ crane", *args)
+              subprocess.run(["crane", *args], check=True)
+
+          rows = []
+          for img in images:
+              pattern = img["artifact"]
+              path    = img["path"]
+              tag     = img["tag"]
+
+              matched = [d for d in sorted(glob.glob("_artifacts/*"))
+                         if os.path.isdir(d) and fnmatch(os.path.basename(d), pattern)]
+
+              if not matched:
+                  print(f"::warning::No artifacts matching '{pattern}', skipping")
+                  continue
+
+              for d in matched:
+                  name = os.path.basename(d)
+                  repo  = f"{path}/{name}"
+                  image = f"{repo}:{tag}"
+
+                  tarballs = glob.glob(os.path.join(d, "*.tar.gz"))
+                  if not tarballs:
+                      print(f"::warning::No .tar.gz in '{name}', skipping")
+                      continue
+                  tarball = tarballs[0]
+
+                  print(f"::group::{name} -> {path}/{name}:{tag}")
+                  print(f"Tarball: {tarball} ({os.path.getsize(tarball)} bytes)")
+
+                  crane("push", tarball, image)
+
+                  digest = subprocess.run(["crane", "digest", image],
+                                          capture_output=True, text=True).stdout.strip()
+
+                  rows.append((name, repo, tag, digest))
+                  print("::endgroup::")
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("## Staging deploy\n\n")
+              f.write("| Package | Image | Tags | Digest |\n|---|---|---|---|\n")
+              for name, repo, tags, digest in rows:
+                  f.write(f"| {name} | `{repo}` | {tags} | `{digest}` |\n")
