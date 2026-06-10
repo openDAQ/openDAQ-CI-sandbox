@@ -1,0 +1,54 @@
+diff --git a/core/opendaq/reader/tests/test_stream_reader.cpp b/core/opendaq/reader/tests/test_stream_reader.cpp
+index 50c68c0b..b912eea7 100644
+--- a/core/opendaq/reader/tests/test_stream_reader.cpp
++++ b/core/opendaq/reader/tests/test_stream_reader.cpp
+@@ -1748,16 +1748,20 @@ TYPED_TEST(StreamReaderTest, SkipSamplesOnePacket)
+     {
+         for (size_t i = 0; i < 10; ++i)
+         {
+-            ASSERT_EQ(firstBatchSamples[i], TypeParam(typename TypeParam::Type(i * 11.1)));
+-            ASSERT_EQ(secondBatchSamples[i], TypeParam(typename TypeParam::Type((40 + i) * 11.1)));
++            TypeParam expectedFirst = TypeParam(typename TypeParam::Type(i * 11.1));
++            TypeParam expectedSecond = TypeParam(typename TypeParam::Type((40 + i) * 11.1));
++            ASSERT_EQ(firstBatchSamples[i], expectedFirst);
++            ASSERT_EQ(secondBatchSamples[i], expectedSecond);
+         }
+     }
+     else
+     {
+         for (size_t i = 0; i < 10; ++i)
+         {
+-            ASSERT_EQ(firstBatchSamples[i], (TypeParam)(i * 11.1));
+-            ASSERT_EQ(secondBatchSamples[i], (TypeParam) ((40 + i) * 11.1));
++            TypeParam expectedFirst = (TypeParam)(i * 11.1);
++            TypeParam expectedSecond = (TypeParam)((40 + i) * 11.1);
++            ASSERT_EQ(firstBatchSamples[i], expectedFirst);
++            ASSERT_EQ(secondBatchSamples[i], expectedSecond);
+         }
+     }
+ }
+@@ -1819,16 +1823,20 @@ TYPED_TEST(StreamReaderTest, SkipSamplesBetweenPackets)
+     {
+         for (size_t i = 0; i < 10; ++i)
+         {
+-            ASSERT_EQ(firstBatchSamples[i], TypeParam(typename TypeParam::Type(i * 11.1)));
+-            ASSERT_EQ(secondBatchSamples[i], TypeParam(typename TypeParam::Type((40 + i) * 11.1)));
++            TypeParam expectedFirst = TypeParam(typename TypeParam::Type(i * 11.1));
++            TypeParam expectedSecond = TypeParam(typename TypeParam::Type((40 + i) * 11.1));
++            ASSERT_EQ(firstBatchSamples[i], expectedFirst);
++            ASSERT_EQ(secondBatchSamples[i], expectedSecond);
+         }
+     }
+     else
+     {
+         for (size_t i = 0; i < 10; ++i)
+         {
+-            ASSERT_EQ(firstBatchSamples[i], (TypeParam) (i * 11.1));
+-            ASSERT_EQ(secondBatchSamples[i], (TypeParam) ((40 + i) * 11.1));
++            TypeParam expectedFirst = (TypeParam)(i * 11.1);
++            TypeParam expectedSecond = (TypeParam)((40 + i) * 11.1);
++            ASSERT_EQ(firstBatchSamples[i], expectedFirst);
++            ASSERT_EQ(secondBatchSamples[i], expectedSecond);
+         }
+     }
+ }
