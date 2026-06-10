@@ -666,6 +666,7 @@ jobs:
 
       - name: Login to ghcr.io
         if: matrix.staging-dep-images != '[]'
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin

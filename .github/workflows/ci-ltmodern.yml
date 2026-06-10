@@ -41,7 +41,8 @@ jobs:
       timeout: '[{"timeout-minutes": 270}]'
       include-jobs: >
         [
-          "macos-26-x86_64-ninja-appleclang-release"
+          "macos-26-x86_64-ninja-appleclang-release",
+          "windows-2022-x86_64-msvs-v143-release"
         ]
       cmake-presets: >
         [
@@ -54,6 +55,16 @@ jobs:
               "CMAKE_PREFIX_PATH": "${sourceDir}/staging-deps/opt/opendaq"
             },
             "staging": true
+          },
+          {
+            "match-jobs": ["windows-*"],
+            "configure-preset": "module",
+            "cache-variables": {
+              "DAQMODULES_LT_STREAMING_ENABLE_TESTS": "OFF",
+              "CMAKE_PREFIX_PATH": "${sourceDir}/staging-deps",
+              "OPENDAQ_MSVC_SINGLE_PROCESS_BUILD": "true"
+            },
+            "staging": true
           }
         ]
       packages: >
@@ -64,6 +75,15 @@ jobs:
               {
                 "dir": "staging-deps",
                 "images": ["ghcr.io/opendaq/sandbox/staging-macos-26-x86_64-ninja-appleclang-release:fece4a92d1261da510202387573c6cb0483e745d"]
+              }
+            ]
+          },
+          {
+            "match-jobs": ["windows-*"],
+            "staging": [
+              {
+                "dir": "staging-deps",
+                "images": ["ghcr.io/opendaq/sandbox/staging-windows-2022-x86_64-msvs-v143-release:fece4a92d1261da510202387573c6cb0483e745d"]
               }
             ]
           }
