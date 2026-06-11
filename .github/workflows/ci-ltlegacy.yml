@@ -1,4 +1,4 @@
-name: Stage openDAQ
+name: Stage LTStreamingModulesLegacy
 
 on:
   workflow_dispatch:
@@ -10,8 +10,8 @@ on:
 
 env:
   project_org: openDAQ
-  project_repo: openDAQ
-  project_ref: ci/staging
+  project_repo: LTStreamingModulesLegacy
+  project_ref: release/v4.0
 
 jobs:
   resolve:
@@ -35,7 +35,10 @@ jobs:
   ci:
     if: ${{ inputs.run-id == '' }}
     needs: resolve
-    name: openDAQ-Build
+    name: LTLegacy-Build
+    permissions:
+      contents: read
+      packages: read
     uses: ./.github/workflows/reusable.yml
     with:
       project-org: ${{ needs.resolve.outputs.org }}
@@ -45,39 +48,49 @@ jobs:
       include-jobs: >
         [
           "macos-26-x86_64-ninja-appleclang-release",
-          "windows-2022-x86_64-msvs-v143-release",
-          "ubuntu-22.04-x86_64-ninja-gcc-14-release",
-          "ubuntu-22.04-armv8-ninja-gcc-14-release",
-          "manylinux_2_28-x86_64-ninja-gcc-release",
-          "manylinux_2_28-aarch64-ninja-gcc-release"
+          "windows-2022-x86_64-msvs-v143-release"
         ]
       cmake-presets: >
         [
           {
             "match-jobs": ["macos-*"],
-            "configure-preset": "core",
-            "cache-variables": {"CMAKE_OSX_DEPLOYMENT_TARGET": "10.15"},
+            "configure-preset": "module",
+            "cache-variables": {
+              "DAQMODULES_LT_STREAMING_ENABLE_TESTS": "OFF",
+              "CMAKE_OSX_DEPLOYMENT_TARGET": "10.15",
+              "CMAKE_PREFIX_PATH": "${sourceDir}/staging-deps/opt/opendaq"
+            },
             "staging": true
           },
           {
             "match-jobs": ["windows-*"],
-            "configure-preset": "core",
-            "cache-variables": {"OPENDAQ_MSVC_SINGLE_PROCESS_BUILD": true},
-            "staging": true
-          },
-          {
-            "match-jobs": ["ubuntu-*", "manylinux_2_28-*"],
-            "configure-preset": "core",
+            "configure-preset": "module",
+            "cache-variables": {
+              "DAQMODULES_LT_STREAMING_ENABLE_TESTS": "OFF",
+              "CMAKE_PREFIX_PATH": "${sourceDir}/staging-deps",
+              "OPENDAQ_MSVC_SINGLE_PROCESS_BUILD": "true"
+            },
             "staging": true
           }
         ]
       packages: >
         [
           {
-            "match-jobs": ["manylinux_2_28-*"],
-            "yum-install": [
-              "mono-core", "freetype-devel", "libudev-devel", "libX11-devel",
-              "libXi-devel", "libXcursor-devel", "libXrandr-devel", "mesa-libGL-devel"
+            "match-jobs": ["macos-*"],
+            "staging": [
+              {
+                "dir": "staging-deps",
+                "images": ["ghcr.io/opendaq/sandbox/opendaq-3.40.0-x86_64-macos-apple-clang-21-release:fece4a92d1261da510202387573c6cb0483e745d"]
+              }
+            ]
+          },
+          {
+            "match-jobs": ["windows-*"],
+            "staging": [
+              {
+                "dir": "staging-deps",
+                "images": ["ghcr.io/opendaq/sandbox/opendaq-3.40.0-x86_64-windows-msvc-143-release:fece4a92d1261da510202387573c6cb0483e745d"]
+              }
             ]
           }
         ]
