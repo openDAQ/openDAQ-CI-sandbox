@@ -45,7 +45,9 @@ jobs:
       include-jobs: >
         [
           "macos-26-x86_64-ninja-appleclang-release",
+          "macos-26-armv8-ninja-appleclang-release",
           "windows-2022-x86_64-msvs-v143-release",
+          "windows-2022-x86-msvs-v143-release",
           "ubuntu-22.04-x86_64-ninja-gcc-14-release",
           "ubuntu-22.04-armv8-ninja-gcc-14-release",
           "manylinux_2_28-x86_64-ninja-gcc-release",
