@@ -1,0 +1,67 @@
+diff --git a/bindings/dotnet/CMakeLists.txt b/bindings/dotnet/CMakeLists.txt
+index bdfd478d..77b2d693 100644
+--- a/bindings/dotnet/CMakeLists.txt
++++ b/bindings/dotnet/CMakeLists.txt
+@@ -41,10 +41,17 @@ set(test_path ${bindingsDir}/test_results)
+ set(outFile ${outputBinDir}/${outputFileName})
+ set(nuget_config --configfile "./.nuget/NuGet.Config" --ignore-failed-sources) # "/property:Configuration=$<CONFIG>_Build")
+ set(dotnet_config --configuration $<CONFIG>_Build)
++# Determine SDK bin path - for multi-config generators (VS) binaries are in $<CONFIG> subdir
++get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
++if(is_multi_config)
++    set(SdkOutputBinDir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>")
++else()
++    set(SdkOutputBinDir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
++endif()
+ # suppress warnings:
+ # > CS1591: Missing XML comment for publicly visible type or member 'xyz'.
+ # > NU1801: The local source 'path' doesn't exist.
+-set(msbuild_parameters -p:NoWarn="CS1591,NU1801" -p:Platform=${platform} -p:CMAKE_RUNTIME_OUTPUT_DIRECTORY=${CMAKE_RUNTIME_OUTPUT_DIRECTORY} -p:OPENDAQ_PACKAGE_VERSION=${OPENDAQ_PACKAGE_VERSION})
++set(msbuild_parameters -p:NoWarn="CS1591,NU1801" -p:Platform=${platform} -p:CMAKE_RUNTIME_OUTPUT_DIRECTORY=${SdkOutputBinDir} -p:OPENDAQ_PACKAGE_VERSION=${OPENDAQ_PACKAGE_VERSION})
+ set(dotnet_cmd_args ${projectFileName} ${dotnet_config} --verbosity minimal ${nuget_config} ${msbuild_parameters})
+ set(dotnet_test_args ${projectFileName} --no-build ${dotnet_config} -p:Platform=${platform} --logger """junit\\\;LogFilePath=${test_path}/test_${targetName}.xml""")
+ #set(dotnet_pack_args ${projectFileName} --no-build ${dotnet_config} ${msbuild_parameters})
+@@ -100,8 +107,14 @@ message(DEBUG "generateCoreTypesDllInfoCmd    = '${generateCoreTypesDllInfoCmd}'
+ file(GLOB_RECURSE dependencyFiles LIST_DIRECTORIES true CONFIGURE_DEPENDS ${bindingsSrcDir}/*.cs)
+ 
+ # <CustomBuild>
++# Note: PRE_BUILD on non-VS generators runs just before PRE_LINK, not before custom commands.
++# Moving cleanup and RTGen here ensures correct order on all generators.
++# See: https://cmake.org/cmake/help/latest/command/add_custom_command.html#build-events
+ add_custom_command(OUTPUT "$<${configEnabled}:${outFile}>"
+-                   COMMENT "$<${configEnabled}:[${targetName}] Building .NET Bindings (${platform}/$<CONFIG>)>"
++                   COMMENT "$<${configEnabled}:[${targetName}] Generating CoreTypesDllInfo.cs and building .NET Bindings (${platform}/$<CONFIG>)>"
++                   COMMAND "$<${configEnabled}:${cleanCmd}>"
++                   COMMAND "$<${configRelease}:${generateCoreTypesDllInfoCmd}>"
++                   COMMAND "$<${configDebug}:${generateCoreTypesDllInfoCmdDebug}>"
+                    COMMAND "$<${configEnabled}:${buildCmd}>"
+                    WORKING_DIRECTORY "$<${configEnabled}:${fullProjectDir}>"
+                    COMMAND_EXPAND_LISTS
+@@ -112,7 +125,7 @@ add_custom_command(OUTPUT "$<${configEnabled}:${outFile}>"
+ add_custom_target(${targetName} ALL
+                   COMMENT "[${targetName}] target (${platform}/$<CONFIG>)"
+                   DEPENDS "$<${configEnabled}:${outFile}>"
+-                          dependencyFiles
++                          ${dependencyFiles}
+ )
+ 
+ #use all modules as dependency
+@@ -129,18 +142,6 @@ add_dependencies(${targetName} ${dependencyTargets}
+                                ${SDK_TARGET_NAME}
+ )
+ 
+-# <PreBuildEvent>
+-add_custom_command(TARGET ${targetName}
+-                   # On Visual Studio Generators, run before any other rules are executed within the target. On other generators, run just before PRE_LINK commands
+-                   PRE_BUILD
+-                   COMMENT "[${targetName}] cleanup '${outputBinDir}' (${platform}/$<CONFIG>) and RTGen CoreTypesDllInfo.cs"
+-                   COMMAND "$<${configEnabled}:${cleanCmd}>"
+-                   COMMAND "$<${configRelease}:${generateCoreTypesDllInfoCmd}>"
+-                   COMMAND "$<${configDebug}:${generateCoreTypesDllInfoCmdDebug}>"
+-                   COMMAND_EXPAND_LISTS
+-                   VERBATIM
+-)
+-
+ # <PostBuildEvent>
+ #message(DEBUG "Adding POST_BUILD (dotnet pack)")
+ #add_custom_command(TARGET ${targetName}
