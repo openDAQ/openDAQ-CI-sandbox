@@ -1,0 +1,390 @@
+name: Test Python Setup
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/test-python-setup.yml'
+  # push:
+  #   paths:
+  #     - '.github/workflows/test-python-setup.yml'
+
+jobs:
+  test-setup-python:
+    if: false
+    runs-on: ${{ matrix.runner }}
+    name: ${{ matrix.runner }} / ${{ matrix.architecture }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel, windows-latest]
+        architecture: ['x64', 'x86', 'arm64']
+        exclude:
+          - runner: ubuntu-latest
+            architecture: arm64
+          - runner: ubuntu-24.04-arm
+            architecture: x86
+          - runner: ubuntu-24.04-arm
+            architecture: x64
+          - runner: macos-latest
+            architecture: x86
+          - runner: macos-latest
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x86
+          - runner: macos-15-intel
+            architecture: arm64
+          - runner: windows-latest
+            architecture: arm64
+
+    steps:
+      - name: Init summary
+        shell: bash
+        run: |
+          echo "## ${{ matrix.runner }} / ${{ matrix.architecture }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Python | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+
+      - name: Test Python 3.8
+        id: py38
+        continue-on-error: true
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'
+          architecture: ${{ matrix.architecture }}
+
+      - name: Record 3.8
+        shell: bash
+        run: |
+          if [ "${{ steps.py38.outcome }}" == "success" ]; then
+            VERSION=$(python --version 2>&1)
+            if [[ "$VERSION" == *"3.8"* ]]; then
+              echo "| 3.8 | ✅ | $VERSION |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| 3.8 | ⚠️ | Wrong: $VERSION |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| 3.8 | ❌ | Not available |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Test Python 3.9
+        id: py39
+        continue-on-error: true
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          architecture: ${{ matrix.architecture }}
+
+      - name: Record 3.9
+        shell: bash
+        run: |
+          if [ "${{ steps.py39.outcome }}" == "success" ]; then
+            VERSION=$(python --version 2>&1)
+            if [[ "$VERSION" == *"3.9"* ]]; then
+              echo "| 3.9 | ✅ | $VERSION |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| 3.9 | ⚠️ | Wrong: $VERSION |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| 3.9 | ❌ | Not available |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Test Python 3.10
+        id: py310
+        continue-on-error: true
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          architecture: ${{ matrix.architecture }}
+
+      - name: Record 3.10
+        shell: bash
+        run: |
+          if [ "${{ steps.py310.outcome }}" == "success" ]; then
+            VERSION=$(python --version 2>&1)
+            if [[ "$VERSION" == *"3.10"* ]]; then
+              echo "| 3.10 | ✅ | $VERSION |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| 3.10 | ⚠️ | Wrong: $VERSION |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| 3.10 | ❌ | Not available |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Test Python 3.11
+        id: py311
+        continue-on-error: true
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: ${{ matrix.architecture }}
+
+      - name: Record 3.11
+        shell: bash
+        run: |
+          if [ "${{ steps.py311.outcome }}" == "success" ]; then
+            VERSION=$(python --version 2>&1)
+            if [[ "$VERSION" == *"3.11"* ]]; then
+              echo "| 3.11 | ✅ | $VERSION |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| 3.11 | ⚠️ | Wrong: $VERSION |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| 3.11 | ❌ | Not available |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Test Python 3.12
+        id: py312
+        continue-on-error: true
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.architecture }}
+
+      - name: Record 3.12
+        shell: bash
+        run: |
+          if [ "${{ steps.py312.outcome }}" == "success" ]; then
+            VERSION=$(python --version 2>&1)
+            if [[ "$VERSION" == *"3.12"* ]]; then
+              echo "| 3.12 | ✅ | $VERSION |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| 3.12 | ⚠️ | Wrong: $VERSION |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| 3.12 | ❌ | Not available |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Test Python 3.13
+        id: py313
+        continue-on-error: true
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: ${{ matrix.architecture }}
+
+      - name: Record 3.13
+        shell: bash
+        run: |
+          if [ "${{ steps.py313.outcome }}" == "success" ]; then
+            VERSION=$(python --version 2>&1)
+            if [[ "$VERSION" == *"3.13"* ]]; then
+              echo "| 3.13 | ✅ | $VERSION |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| 3.13 | ⚠️ | Wrong: $VERSION |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| 3.13 | ❌ | Not available |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Test Python 3.14
+        id: py314
+        continue-on-error: true
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          architecture: ${{ matrix.architecture }}
+
+      - name: Record 3.14
+        shell: bash
+        run: |
+          if [ "${{ steps.py314.outcome }}" == "success" ]; then
+            VERSION=$(python --version 2>&1)
+            if [[ "$VERSION" == *"3.14"* ]]; then
+              echo "| 3.14 | ✅ | $VERSION |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| 3.14 | ⚠️ | Wrong: $VERSION |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| 3.14 | ❌ | Not available |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  test-apt-python-i386:
+    if: false
+    runs-on: ubuntu-latest
+    name: Ubuntu apt i386
+    steps:
+      - name: Add i386 architecture
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+
+      - name: Check default repos
+        run: |
+          echo "## Ubuntu apt i386 (default repos)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Python | Available | Dev |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-----------|-----|" >> $GITHUB_STEP_SUMMARY
+
+          for ver in 3.8 3.9 3.10 3.11 3.12 3.13 3.14; do
+            PKG=$(apt-cache show python${ver}:i386 2>&1 | head -1)
+            DEV=$(apt-cache show python${ver}-dev:i386 2>&1 | head -1)
+
+            if [[ "$PKG" == Package* ]]; then STATUS="✅"; else STATUS="❌"; fi
+            if [[ "$DEV" == Package* ]]; then DEV_STATUS="✅"; else DEV_STATUS="❌"; fi
+
+            echo "| ${ver} | ${STATUS} | ${DEV_STATUS} |" >> $GITHUB_STEP_SUMMARY
+          done
+
+      - name: Add deadsnakes PPA
+        run: |
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update
+
+      - name: Check with deadsnakes PPA
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Ubuntu apt i386 (with deadsnakes PPA)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Python | Available | Dev |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-----------|-----|" >> $GITHUB_STEP_SUMMARY
+
+          for ver in 3.8 3.9 3.10 3.11 3.12 3.13 3.14; do
+            PKG=$(apt-cache show python${ver}:i386 2>&1 | head -1)
+            DEV=$(apt-cache show python${ver}-dev:i386 2>&1 | head -1)
+
+            if [[ "$PKG" == Package* ]]; then STATUS="✅"; else STATUS="❌"; fi
+            if [[ "$DEV" == Package* ]]; then DEV_STATUS="✅"; else DEV_STATUS="❌"; fi
+
+            echo "| ${ver} | ${STATUS} | ${DEV_STATUS} |" >> $GITHUB_STEP_SUMMARY
+          done
+
+
+  test-setup-python-versions:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            architecture: x86
+          - runner: ubuntu-latest
+            architecture: x64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+          - runner: macos-latest
+            architecture: arm64
+          - runner: macos-14
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x64
+          - runner: macos-15
+            architecture: arm64
+          - runner: windows-latest
+            architecture: x86
+          - runner: windows-latest
+            architecture: x64
+    name: ${{ matrix.runner }} / ${{ matrix.architecture }}
+    runs-on: ${{ matrix.runner }}
+    env:
+      PYTHON_VERSIONS: |
+        3.8
+        3.9
+        3.10
+        3.11
+        3.12
+        3.13
+        3.14
+
+    steps:
+      - name: Install tree (Windows)
+        if: runner.os == 'Windows'
+        run: choco install tree -y
+
+      - name: Install tree (macOS)
+        if: runner.os == 'macOS'
+        run: which tree || brew install tree
+
+      - name: Set tool cache path
+        id: tool-cache
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            TOOL_CACHE="/Users/runner/hostedtoolcache"
+          else
+            TOOL_CACHE="$RUNNER_TOOL_CACHE"
+          fi
+          # Convert to unix path on Windows
+          if command -v cygpath &> /dev/null; then
+            TOOL_CACHE=$(cygpath -u "$TOOL_CACHE")
+          fi
+          echo "tool-cache-unix=$TOOL_CACHE" >> $GITHUB_OUTPUT
+
+      - name: List tool cache (before)
+        shell: bash
+        run: |
+          echo "TOOL_CACHE: ${{ steps.tool-cache.outputs.tool-cache-unix }}"
+          tree -L 2 -pughD "${{ steps.tool-cache.outputs.tool-cache-unix }}/Python" 2>/dev/null || echo "No Python in cache yet"
+
+      - name: Setup Python
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSIONS }}
+          architecture: ${{ matrix.architecture }}
+
+      - name: List tool cache (after)
+        shell: bash
+        run: |
+          echo "TOOL_CACHE: ${{ steps.tool-cache.outputs.tool-cache-unix }}"
+          tree -L 2 -pughD "${{ steps.tool-cache.outputs.tool-cache-unix }}/Python" 2>/dev/null || echo "No Python in cache"
+          echo ""
+          echo "setup-python outputs:"
+          echo "  python-version: ${{ steps.setup-python.outputs.python-version }}"
+          echo "  python-path: ${{ steps.setup-python.outputs.python-path }}"
+          echo ""
+          echo "which python versions:"
+          echo -n "  python: "
+          which python 2>/dev/null || echo "not found"
+          for v in 3.8 3.9 3.10 3.11 3.12 3.13 3.14; do
+            echo -n "  python$v: "
+            which python$v 2>/dev/null || echo "not found"
+          done
+
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            echo ""
+            echo "py --list-paths:"
+            py --list-paths
+          fi
+
+  test-setup-python-versions-empty:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            architecture: x86
+          - runner: ubuntu-latest
+            architecture: x64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+          - runner: macos-latest
+            architecture: arm64
+          - runner: macos-14
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x64
+          - runner: macos-15
+            architecture: arm64
+          - runner: windows-latest
+            architecture: x86
+          - runner: windows-latest
+            architecture: x64
+
+    name: ${{ matrix.runner }} / ${{ matrix.architecture }} / empty version
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Setup Python with empty version
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          architecture: ${{ matrix.architecture }}
+
+      - name: List tool cache (after)
+        shell: bash
+        run: |
+          echo "setup-python outputs:"
+          echo "  python-version: ${{ steps.setup-python.outputs.python-version }}"
+          echo "  python-path: ${{ steps.setup-python.outputs.python-path }}"
